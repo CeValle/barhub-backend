@@ -1,5 +1,5 @@
 const router       = require("express").Router();
-const { supabase } = require("../services/supabase");
+const { supabase } = require("./supabase");
 
 const PCT_MOCHE    = 0.045;
 const PCT_TERMINAL = 0.08;
