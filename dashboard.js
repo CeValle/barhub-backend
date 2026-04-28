@@ -1,5 +1,5 @@
 const router       = require("express").Router();
-const { supabase } = require("../services/supabase");
+const { supabase } = require("./supabase");
 
 // GET /api/dashboard/semana-actual
 router.get("/semana-actual", async (req, res) => {
