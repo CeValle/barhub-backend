@@ -1,12 +1,16 @@
-const router       = require("express").Router();
+const router = require("express").Router();
 const { supabase } = require("./supabase");
 
 // GET /api/dashboard/semana-actual
 router.get("/semana-actual", async (req, res) => {
   try {
-    // Calcular semana actual (mié→jue)
     const hoy = new Date();
-    const mie = new Date(hoy); mie.setDate(hoy.getDate() - ((hoy.getDay() + 4) % 7 + 1));
+    // Calculo semana correcta: retroceder al miercoles mas reciente
+    // Si hoy ES miercoles, ir al miercoles anterior (semana ya cerrada)
+    const dow = hoy.getDay(); // 0=dom,1=lun,2=mar,3=mie,4=jue,5=vie,6=sab
+    let diasAtras = (dow + 4) % 7; // 0 si hoy es mie
+    if (diasAtras === 0) diasAtras = 7; // si hoy ES mie, ir 7 dias atras
+    const mie = new Date(hoy); mie.setDate(hoy.getDate() - diasAtras);
     const jue = new Date(mie); jue.setDate(mie.getDate() + 1);
     const fmt = d => d.toISOString().split("T")[0];
     const semana = `${fmt(mie)}_a_${fmt(jue)}`;
@@ -24,10 +28,10 @@ router.get("/semana-actual", async (req, res) => {
       ok: true,
       semana,
       totalVentas,
-      ventasMesero: ventasRes.data  || [],
-      ventasGrupo:  gruposRes.data  || [],
-      asistencias:  asistRes.data   || [],
-      nomina:       nominaRes.data  || [],
+      ventasMesero: ventasRes.data || [],
+      ventasGrupo:  gruposRes.data || [],
+      asistencias:  asistRes.data  || [],
+      nomina:       nominaRes.data || [],
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -42,7 +46,7 @@ router.get("/historico", async (req, res) => {
       .select("*")
       .order("semana", { ascending: false })
       .limit(12);
-    res.json({ ok: true, historico: data || [] });
+    res.json({ ok: true, semanas: data || [] });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
