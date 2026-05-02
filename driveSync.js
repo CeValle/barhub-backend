@@ -6,7 +6,9 @@ const NOMBRE_MAP = { "benny": "omar" };
 const mapNombre = n => { const k=(n||"").toLowerCase().trim(); return NOMBRE_MAP[k]?capitalize(NOMBRE_MAP[k]):capitalize(k); };
 const capitalize = s => s.charAt(0).toUpperCase()+s.slice(1);
 
-// Yulisa/Omar/Saul = 20h | todos los demas = 46h
+// Horas programadas por empleado
+// Yulisa=20, Omar=20, Saul=20 (turno parcial)
+// Alexis=46, Angel=46, Edith=46, Jorge=46, Erick=46, Andrea=46, Gerardo=46
 const HRS_PROG = {
   yulisa:20, omar:20, saul:20,
   alexis:46, angel:46, edith:46, jorge:46, erick:46, andrea:46, gerardo:46
@@ -26,62 +28,31 @@ function detectarTipo(nombre) {
   return null;
 }
 
-// Extrae la fecha mas alta mencionada en el nombre del archivo
-// Ej: "ventas mesero 22-26 de abril 2026" -> extrae 26 como dia de fin
-function extraerFechaDesdeNombre(nombre) {
-  const n = nombre.toLowerCase();
-  // Buscar patron "dd-dd de mes aaaa" o "dd al dd mes aaaa"
-  const meses = { enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12 };
-  let mes = 0, anio = 0, dia = 0;
-  for (const [nombre, num] of Object.entries(meses)) {
-    if (n.includes(nombre)) { mes = num; break; }
-  }
-  const anioMatch = n.match(/20\d{2}/);
-  if (anioMatch) anio = parseInt(anioMatch[0]);
-  // Buscar el dia mas alto en el nombre (fin de semana)
-  const diasMatch = n.match(/\d+/g);
-  if (diasMatch) {
-    const dias = diasMatch.map(Number).filter(d => d >= 1 && d <= 31);
-    dia = dias.length > 0 ? Math.max(...dias) : 0;
-  }
-  if (mes && anio && dia) return new Date(anio, mes-1, dia).getTime();
-  return 0;
-}
-
-// Busca todos los PDFs y retorna SOLO EL MAS RECIENTE POR TIPO
-// usando la fecha del NOMBRE del archivo (no fecha de modificacion en Drive)
-async function buscarMasRecientesPorTipo(drive, diasAtras=60) {
+// Busca todos los PDFs recientes y retorna SOLO EL MAS RECIENTE por tipo
+async function buscarMasRecientesPorTipo(drive, diasAtras=30) {
   const desde = new Date(); desde.setDate(desde.getDate()-diasAtras);
   const res = await drive.files.list({
     q: `mimeType='application/pdf' and modifiedTime>'${desde.toISOString()}' and trashed=false`,
-    fields:"files(id,name,modifiedTime,parents)", pageSize:100,
+    fields:"files(id,name,modifiedTime,parents)", pageSize:50,
     includeItemsFromAllDrives:true, supportsAllDrives:true,
+    orderBy:"modifiedTime desc",
   });
   const todos = res.data.files || [];
-  console.log(`[SYNC] PDFs encontrados en Drive: ${todos.length}`);
-  todos.forEach(f => {
-    const fechaNombre = extraerFechaDesdeNombre(f.name);
-    console.log(`  - ${f.name} | fecha-nombre: ${fechaNombre ? new Date(fechaNombre).toLocaleDateString() : 'sin fecha'}`);
-  });
+  console.log(`[SYNC] PDFs encontrados: ${todos.length}`);
+  todos.forEach(f => console.log(`  - ${f.name} (${f.modifiedTime.slice(0,10)})`));
 
-  // Agrupar por tipo y quedarse con el que tiene la fecha MAS RECIENTE EN EL NOMBRE
+  // Agrupar por tipo, quedarse solo con el más reciente de cada uno
   const porTipo = {};
   for (const f of todos) {
     const tipo = detectarTipo(f.name);
-    if (!tipo) { console.log(`[SYNC] Sin tipo: ${f.name}`); continue; }
-    const fechaNombre = extraerFechaDesdeNombre(f.name);
-    const fechaActual = porTipo[tipo] ? extraerFechaDesdeNombre(porTipo[tipo].name) : 0;
-    // Preferir fecha de nombre; si no hay, usar fecha de modificacion
-    const esMasReciente = fechaNombre > 0
-      ? fechaNombre > fechaActual
-      : new Date(f.modifiedTime) > new Date(porTipo[tipo]?.modifiedTime || 0);
-    if (!porTipo[tipo] || esMasReciente) {
+    if (!tipo) { console.log(`[SYNC] Sin tipo reconocido: ${f.name}`); continue; }
+    if (!porTipo[tipo] || new Date(f.modifiedTime) > new Date(porTipo[tipo].modifiedTime)) {
       porTipo[tipo] = f;
     }
   }
 
   const seleccionados = Object.values(porTipo);
-  console.log(`[SYNC] Seleccionados (1 por tipo, por fecha de nombre): ${seleccionados.length}`);
+  console.log(`[SYNC] Seleccionados (1 por tipo, max 3): ${seleccionados.length}`);
   seleccionados.forEach(f => console.log(`  * [${detectarTipo(f.name)}] ${f.name}`));
   return seleccionados;
 }
@@ -98,9 +69,9 @@ async function extraerDatosConClaude(pdfBuffer, tipo) {
   const client = new Anthropic({ apiKey:process.env.ANTHROPIC_API_KEY });
   const b64 = pdfBuffer.toString("base64");
   const prompts = {
-    ventas_mesero: 'Analiza este reporte de ventas por mesero de SoftRestaurant. Responde SOLO con JSON valido (sin markdown, sin texto): {"semana":"YYYY-MM-DD_a_YYYY-MM-DD","meseros":[{"nombre":"string","venta":0,"propTarjeta":0,"efectivo":0,"comensales":0}],"total_venta":0} Si ves Benny cambialo por Omar.',
-    ventas_grupo:  'Analiza este reporte de ventas por grupo de SoftRestaurant. Responde SOLO con JSON valido (sin markdown, sin texto): {"semana":"YYYY-MM-DD_a_YYYY-MM-DD","grupos":[{"grupo":"string","venta":0,"cantidad":0}],"total":0}',
-    asistencias:   'Analiza este reporte de asistencias de SoftRestaurant. Responde SOLO con JSON valido (sin markdown, sin texto): {"periodo":"YYYY-MM-DD_a_YYYY-MM-DD","empleados":[{"nombre":"string","horas_trabajadas":0,"dias_asistidos":0}]} Si ves Benny cambialo por Omar.',
+    ventas_mesero: 'Analiza este reporte de ventas por mesero de SoftRestaurant. Responde SOLO con JSON valido (sin markdown, sin texto): {"semana":"YYYY-MM-DD_a_YYYY-MM-DD","meseros":[{"nombre":"string","venta":0,"propTarjeta":0,"efectivo":0,"comensales":0}],"total_venta":0} Si ves el nombre Benny cambialo por Omar.',
+    ventas_grupo:  'Analiza este reporte de ventas por grupo/area de SoftRestaurant. Responde SOLO con JSON valido (sin markdown, sin texto): {"semana":"YYYY-MM-DD_a_YYYY-MM-DD","grupos":[{"grupo":"string","venta":0,"cantidad":0}],"total":0}',
+    asistencias:   'Analiza este reporte de asistencias de SoftRestaurant. Responde SOLO con JSON valido (sin markdown, sin texto): {"periodo":"YYYY-MM-DD_a_YYYY-MM-DD","empleados":[{"nombre":"string","horas_trabajadas":0,"dias_asistidos":0}]} Si ves el nombre Benny cambialo por Omar.',
   };
   const msg = await client.messages.create({
     model:"claude-sonnet-4-20250514", max_tokens:2000,
@@ -141,13 +112,16 @@ async function guardarAsistencias(datos, semana) {
     const nombre = mapNombre(e.nombre);
     const hrsProg = HRS_PROG[nombre.toLowerCase()] || 0;
     const hrsBruto = e.horas_trabajadas || 0;
+
+    // Regla 90%: si asistio >= 90% de las horas programadas -> pagar sueldo completo
     let horasReales = hrsBruto;
-    // Regla 90%
     if (hrsProg > 0 && hrsBruto >= hrsProg * 0.90) {
-      const pct = ((hrsBruto/hrsProg)*100).toFixed(1);
-      console.log(`[SYNC] ${nombre}: ${hrsBruto}h = ${pct}% de ${hrsProg}h -> COMPLETO`);
+      console.log(`[SYNC] ${nombre}: ${hrsBruto}h >= 90% de ${hrsProg}h prog (${((hrsBruto/hrsProg)*100).toFixed(1)}%) -> completo`);
       horasReales = hrsProg;
+    } else if (hrsProg > 0) {
+      console.log(`[SYNC] ${nombre}: ${hrsBruto}h = ${((hrsBruto/hrsProg)*100).toFixed(1)}% de ${hrsProg}h prog -> parcial`);
     }
+
     await supabase.from("asistencias").upsert({
       semana, nombre, horas_reales:horasReales,
       dias_asistidos:e.dias_asistidos||0, updated_at:new Date().toISOString(),
@@ -159,10 +133,12 @@ async function syncSemanal() {
   console.log("[SYNC] Iniciando...");
   const drive = getDriveClient();
   const resultados = { procesados:0, errores:[], archivos:[] };
+
+  // Calcular semana actual (miércoles→jueves del ciclo de pago)
   const hoy = new Date();
   const dow = hoy.getDay();
   let diasAtrasAMie = (dow + 4) % 7;
-  if (diasAtrasAMie === 0) diasAtrasAMie = 7;
+  if (diasAtrasAMie === 0) diasAtrasAMie = 7; // Si hoy ES mié, ir al anterior
   const mie = new Date(hoy); mie.setDate(hoy.getDate()-diasAtrasAMie);
   const jue = new Date(mie); jue.setDate(mie.getDate()+1);
   const fmt = d => d.toISOString().split("T")[0];
@@ -171,7 +147,7 @@ async function syncSemanal() {
 
   let archivos = [];
   try {
-    archivos = await buscarMasRecientesPorTipo(drive, 60);
+    archivos = await buscarMasRecientesPorTipo(drive, 30);
   } catch(err) {
     console.error("[SYNC] Error buscando:", err.message);
     resultados.errores.push({ error:err.message });
