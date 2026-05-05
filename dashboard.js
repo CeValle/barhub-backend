@@ -15,20 +15,19 @@ router.get("/semana-actual", async (req, res) => {
   try {
     let semana = calcularSemana();
 
-    // Si no hay datos en la semana calculada, usar la más reciente con datos
+    // Si no hay datos en la semana calculada, usar la mas reciente con datos
     const check = await supabase.from("asistencias").select("semana").eq("semana",semana).limit(1);
     if (!check.data || check.data.length===0) {
       const latest = await supabase.from("asistencias").select("semana").order("semana",{ascending:false}).limit(1);
       if (latest.data?.length) semana = latest.data[0].semana;
     }
 
-    // Las 2 semanas de ventas_mesero más recientes (actual + anterior para propinas)
+    // Todas las semanas de ventas_mesero ordenadas desc
     const todasVentas = await supabase.from("ventas_mesero")
       .select("*").order("semana",{ascending:false});
-    
-    // Agrupar por semana, tomar las 2 más recientes
+
     const semanas = [...new Set((todasVentas.data||[]).map(v=>v.semana))].sort().reverse();
-    const semanaVentasActual  = semanas[0] || semana;
+    const semanaVentasActual   = semanas[0] || semana;
     const semanaVentasPropinas = semanas[1] || semanas[0] || semana;
 
     const ventasActual   = (todasVentas.data||[]).filter(v=>v.semana===semanaVentasActual);
@@ -43,10 +42,9 @@ router.get("/semana-actual", async (req, res) => {
     const totalVentas = (gruposRes.data||[]).reduce((a,g)=>a+g.venta,0);
 
     res.json({
-      ok:true, semana,
-      totalVentas,
-      ventasMesero:        ventasActual,    // semana actual — para moche
-      ventasMeseroPropinas: ventasPropinas, // semana anterior — para propinas en tarjeta
+      ok:true, semana, totalVentas,
+      ventasMesero:         ventasActual,
+      ventasMeseroPropinas: ventasPropinas,
       semanaVentasActual,
       semanaVentasPropinas,
       ventasGrupo:  gruposRes.data||[],
