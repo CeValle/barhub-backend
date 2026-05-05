@@ -7,7 +7,7 @@ const mapNombre = n => { const k=(n||"").toLowerCase().trim(); return NOMBRE_MAP
 const capitalize = s => s.charAt(0).toUpperCase()+s.slice(1);
 
 const EMPLEADOS_CONFIG = {
-  yulisa:  { hrsProg:20, pagoFijo:1500 },
+    yulisa:  { hrsProg:20, pagoFijo:2000 },
   omar:    { hrsProg:20, pagoFijo:1500 },
   saul:    { hrsProg:20, pagoFijo:1500 },
   alexis:  { hrsProg:46, pagoFijo:null },
