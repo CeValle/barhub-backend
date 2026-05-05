@@ -48,8 +48,8 @@ function extraerFechaDesdeNombre(nombre) {
   return 0;
 }
 
-// Para ventas_mesero devuelve los 2 más recientes (actual + anterior para propinas)
-// Para otros tipos devuelve solo el más reciente
+// Para ventas_mesero devuelve los 2 mas recientes por fecha del nombre
+// Para otros tipos devuelve solo el mas reciente
 async function buscarArchivosRelevantes(drive, diasAtras=60) {
   const desde = new Date(); desde.setDate(desde.getDate()-diasAtras);
   const res = await drive.files.list({
@@ -61,10 +61,9 @@ async function buscarArchivosRelevantes(drive, diasAtras=60) {
   console.log(`[SYNC] PDFs en Drive: ${todos.length}`);
   todos.forEach(f => {
     const fn = extraerFechaDesdeNombre(f.name);
-    console.log(`  - ${f.name} | fecha-nombre: ${fn?new Date(fn).toLocaleDateString('es-MX'):'sin fecha'}`);
+    console.log(`  - ${f.name} | fecha: ${fn?new Date(fn).toLocaleDateString('es-MX'):'sin fecha'}`);
   });
 
-  // Agrupar por tipo
   const porTipo = {};
   for (const f of todos) {
     const tipo = detectarTipo(f.name);
@@ -73,30 +72,27 @@ async function buscarArchivosRelevantes(drive, diasAtras=60) {
     porTipo[tipo].push(f);
   }
 
-  // Ordenar cada tipo por fecha del nombre (más reciente primero)
+  // Ordenar por fecha del nombre desc
   for (const tipo of Object.keys(porTipo)) {
     porTipo[tipo].sort((a,b) => {
-      const fa = extraerFechaDesdeNombre(a.name);
-      const fb = extraerFechaDesdeNombre(b.name);
-      if (fa && fb) return fb - fa;
-      return new Date(b.modifiedTime) - new Date(a.modifiedTime);
+      const fa=extraerFechaDesdeNombre(a.name), fb=extraerFechaDesdeNombre(b.name);
+      if (fa&&fb) return fb-fa;
+      return new Date(b.modifiedTime)-new Date(a.modifiedTime);
     });
   }
 
   const seleccionados = [];
-  // ventas_mesero: los 2 más recientes (actual y anterior para propinas)
+  // ventas_mesero: top 2 (actual + anterior para propinas)
   if (porTipo.ventas_mesero) {
-    const top2 = porTipo.ventas_mesero.slice(0, 2);
-    top2.forEach((f,i) => {
-      seleccionados.push({ ...f, subtipo: i===0 ? 'ventas_mesero_actual' : 'ventas_mesero_anterior' });
+    porTipo.ventas_mesero.slice(0,2).forEach((f,i) => {
+      seleccionados.push({...f, subtipo: i===0?'ventas_mesero_actual':'ventas_mesero_anterior'});
+      console.log(`[SYNC] ventas_mesero [${i===0?'actual':'anterior'}]: ${f.name}`);
     });
-    console.log(`[SYNC] ventas_mesero: ${top2.map(f=>f.name).join(' | ')}`);
   }
-  // Los demás: solo el más reciente
   for (const tipo of ['ventas_grupo','asistencias']) {
     if (porTipo[tipo]?.[0]) {
-      seleccionados.push({ ...porTipo[tipo][0], subtipo: tipo });
-      console.log(`[SYNC] ${tipo}: ${porTipo[tipo][0].name}`);
+      seleccionados.push({...porTipo[tipo][0], subtipo:tipo});
+      console.log(`[SYNC] [${tipo}]: ${porTipo[tipo][0].name}`);
     }
   }
   return seleccionados;
@@ -110,7 +106,7 @@ async function descargarPDF(drive, fileId) {
   return Buffer.from(res.data);
 }
 
-async function extraerDatosConClaude(pdfBuffer, tipo) {
+async function extraerDatosConClaude(pdfBuffer, subtipo) {
   const client = new Anthropic({ apiKey:process.env.ANTHROPIC_API_KEY });
   const b64 = pdfBuffer.toString("base64");
   const prompts = {
@@ -118,7 +114,7 @@ async function extraerDatosConClaude(pdfBuffer, tipo) {
 La columna de propinas en tarjeta se llama "PROPINA" en el documento.
 Responde SOLO con JSON valido (sin markdown, sin texto adicional):
 {"semana":"YYYY-MM-DD_a_YYYY-MM-DD","meseros":[{"nombre":"string","venta":0,"propina":0,"efectivo":0,"comensales":0}],"total_venta":0}
-Donde "propina" es el valor de la columna PROPINA del PDF.
+Donde "propina" es el valor exacto de la columna PROPINA del PDF.
 Si ves el nombre Benny cambialo por Omar.`,
     ventas_grupo: `Analiza este reporte de ventas por grupo de SoftRestaurant.
 Responde SOLO con JSON valido (sin markdown, sin texto adicional):
@@ -128,7 +124,7 @@ Responde SOLO con JSON valido (sin markdown, sin texto adicional):
 {"periodo":"YYYY-MM-DD_a_YYYY-MM-DD","empleados":[{"nombre":"string","horas_trabajadas":0,"dias_asistidos":0}]}
 Si ves el nombre Benny cambialo por Omar.`,
   };
-  const tipoBase = tipo.replace('_actual','').replace('_anterior','');
+  const tipoBase = subtipo.replace('_actual','').replace('_anterior','');
   const msg = await client.messages.create({
     model:"claude-sonnet-4-20250514", max_tokens:2000,
     messages:[{role:"user",content:[
@@ -142,17 +138,16 @@ Si ves el nombre Benny cambialo por Omar.`,
 }
 
 async function limpiarSemana(tabla, semana) {
-  const { error } = await supabase.from(tabla).delete().eq("semana", semana);
+  const {error} = await supabase.from(tabla).delete().eq("semana", semana);
   if (error) console.error(`[SYNC] Error limpiando ${tabla}:`, error.message);
-  else console.log(`[SYNC] ✓ Limpiada ${tabla} semana ${semana}`);
+  else console.log(`[SYNC] Limpiada ${tabla} semana ${semana}`);
 }
 
-async function guardarVentasMesero(datos, etiqueta) {
-  // Usar la semana que Claude extrajo del PDF (fecha real del documento)
-  const semana = datos.semana || etiqueta;
+async function guardarVentasMesero(datos) {
+  const semana = datos.semana;
   await limpiarSemana("ventas_mesero", semana);
   for (const m of datos.meseros) {
-    const propina = m.propina ?? m.prop_tarjeta ?? m.propTarjeta ?? 0;
+    const propina = m.propina ?? m.prop_tarjeta ?? 0;
     await supabase.from("ventas_mesero").insert({
       semana, nombre:mapNombre(m.nombre),
       venta:m.venta||0, prop_tarjeta:propina,
@@ -163,8 +158,7 @@ async function guardarVentasMesero(datos, etiqueta) {
   await supabase.from("resumen_semanal").upsert({
     semana, total_ventas:datos.total_venta||0, updated_at:new Date().toISOString(),
   },{ onConflict:"semana" });
-  console.log(`[SYNC] Ventas mesero guardadas en semana ${semana}`);
-  return semana;
+  console.log(`[SYNC] ventas_mesero guardado en semana ${semana}`);
 }
 
 async function guardarVentasGrupo(datos, semana) {
@@ -194,7 +188,7 @@ async function guardarAsistencias(datos, semana) {
       dias_asistidos:e.dias_asistidos||0, updated_at:new Date().toISOString(),
     });
   }
-  // Andrea y Gerardo: siempre presentes
+  // Insertar adminFijo aunque no aparezcan en el PDF
   for (const [nombre, cfg] of Object.entries(EMPLEADOS_CONFIG)) {
     if (cfg.adminFijo) {
       const nomCap = capitalize(nombre);
@@ -213,37 +207,35 @@ async function syncSemanal() {
   console.log("[SYNC] Iniciando...");
   const drive = getDriveClient();
   const resultados = { procesados:0, errores:[], archivos:[] };
-
   const hoy = new Date();
   const dow = hoy.getDay();
-  let diasAtrasAMie = (dow+4)%7; if(diasAtrasAMie===0) diasAtrasAMie=7;
-  const mie = new Date(hoy); mie.setDate(hoy.getDate()-diasAtrasAMie);
-  const jue = new Date(mie); jue.setDate(mie.getDate()+1);
-  const fmt = d => d.toISOString().split("T")[0];
-  const semanaActual = `${fmt(mie)}_a_${fmt(jue)}`;
+  let diasAtrasAMie=(dow+4)%7; if(diasAtrasAMie===0) diasAtrasAMie=7;
+  const mie=new Date(hoy); mie.setDate(hoy.getDate()-diasAtrasAMie);
+  const jue=new Date(mie); jue.setDate(mie.getDate()+1);
+  const fmt=d=>d.toISOString().split("T")[0];
+  const semanaActual=`${fmt(mie)}_a_${fmt(jue)}`;
   console.log("[SYNC] Semana calculada:", semanaActual);
 
-  let archivos = [];
-  try { archivos = await buscarArchivosRelevantes(drive, 60); }
+  let archivos=[];
+  try { archivos=await buscarArchivosRelevantes(drive, 60); }
   catch(err) { resultados.errores.push({error:err.message}); return resultados; }
 
   for (const archivo of archivos) {
-    const { subtipo } = archivo;
-    const tipoBase = subtipo.replace('_actual','').replace('_anterior','');
+    const {subtipo}=archivo;
+    const tipoBase=subtipo.replace('_actual','').replace('_anterior','');
     console.log(`[SYNC] Procesando: ${archivo.name} [${subtipo}]`);
     try {
-      const buf = await descargarPDF(drive, archivo.id);
-      const datos = await extraerDatosConClaude(buf, subtipo);
-      let semanaUsada = semanaActual;
-      if (tipoBase==="ventas_mesero") semanaUsada = await guardarVentasMesero(datos, semanaActual);
+      const buf=await descargarPDF(drive, archivo.id);
+      const datos=await extraerDatosConClaude(buf, subtipo);
+      if (tipoBase==="ventas_mesero") await guardarVentasMesero(datos);
       if (tipoBase==="ventas_grupo")  await guardarVentasGrupo(datos, semanaActual);
       if (tipoBase==="asistencias")   await guardarAsistencias(datos, semanaActual);
       resultados.procesados++;
-      resultados.archivos.push({ nombre:archivo.name, subtipo, semana:semanaUsada, ok:true });
+      resultados.archivos.push({nombre:archivo.name, subtipo, semana:datos.semana||semanaActual, ok:true});
     } catch(err) {
       console.error(`[SYNC] Error en ${archivo.name}:`, err.message);
-      resultados.errores.push({ archivo:archivo.name, error:err.message });
-      resultados.archivos.push({ nombre:archivo.name, subtipo, ok:false, error:err.message });
+      resultados.errores.push({archivo:archivo.name, error:err.message});
+      resultados.archivos.push({nombre:archivo.name, subtipo, ok:false, error:err.message});
     }
   }
 
