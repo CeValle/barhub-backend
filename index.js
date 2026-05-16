@@ -16,15 +16,16 @@ app.use("/api/dashboard", require("./dashboard"));
 
 app.get("/health", (_req, res) => res.json({ ok: true, project: "barhub", ts: new Date().toISOString() }));
 
-// Serve BarHub dashboard at /barhub
 app.get("/barhub", (_req, res) => {
-    try {
-        const html = fs.readFileSync(path.join(__dirname, "barhub.html"), "utf8");
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.send(html);
-    } catch(e) {
-        res.status(404).send("BarHub not found. Add barhub.html to the repo.");
+    const htmlPath = path.join(__dirname, "barhub.html");
+    if (!fs.existsSync(htmlPath)) {
+        return res.status(200).setHeader("Content-Type","text/html").send(
+            "<h1>BarHub</h1><p>Falta barhub.html en el repo. Sube el archivo al repositorio de GitHub.</p>"
+        );
     }
+    const html = fs.readFileSync(htmlPath, "utf8");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
 });
 
 cron.schedule("0 21 * * 5", async () => {
