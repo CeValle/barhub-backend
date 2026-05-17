@@ -3,29 +3,26 @@ const { supabase } = require("./supabase");
 
 function calcularSemanaActual() {
   const hoy = new Date();
-  const dow  = hoy.getDay();          // 0=dom
-  const d    = dow === 0 ? 7 : dow;  // días desde domingo
+  const dow  = hoy.getDay();
+  const d    = dow === 0 ? 7 : dow;
   const dom  = new Date(hoy); dom.setDate(hoy.getDate() - d);
   const sab  = new Date(dom); sab.setDate(dom.getDate() + 6);
   const fmt  = x => x.toISOString().split("T")[0];
   return `${fmt(dom)}_a_${fmt(sab)}`;
 }
 
+// Fecha del sábado de una semana "YYYY-MM-DD_a_YYYY-MM-DD"
 function semanaFin(key) {
-  // "YYYY-MM-DD_a_YYYY-MM-DD" → Date del sábado
   return new Date(key.split("_a_")[1] + "T23:59:59");
 }
 
-// Dado una semana objetivo, encuentra la semana más cercana
-// en el array de semanas disponibles cuyo fin <= fin de la objetivo
-// Si ninguna cumple, devuelve la más antigua (primera)
+// Semana más cercana cuyo fin <= fin del target (la más reciente que no supera al target)
 function semanaProxima(target, disponibles) {
-  if (!disponibles.length) return null;
+  if (!disponibles || !disponibles.length) return null;
   const finTarget = semanaFin(target);
-  // filtrar las que terminan antes o igual al target
   const candidatas = disponibles.filter(s => semanaFin(s) <= finTarget);
-  if (candidatas.length) return candidatas[candidatas.length - 1]; // la más reciente
-  return disponibles[0]; // la más antigua si todas son futuras
+  if (candidatas.length) return candidatas[candidatas.length - 1];
+  return disponibles[0];
 }
 
 // GET /api/dashboard/semana-actual?semana=YYYY-MM-DD_a_YYYY-MM-DD
@@ -34,7 +31,7 @@ router.get("/semana-actual", async (req, res) => {
     const semanaParam = req.query.semana;
     let semana = semanaParam || calcularSemanaActual();
 
-    // Si no hay param, verificar que existan datos; si no, usar la más reciente
+    // Sin param → fallback a semana más reciente con datos
     if (!semanaParam) {
       const chk = await supabase.from("asistencias")
         .select("semana").eq("semana", semana).limit(1);
@@ -46,20 +43,23 @@ router.get("/semana-actual", async (req, res) => {
     }
 
     // ── Todas las semanas disponibles ──────────────────────────────────────
-    const [vmSems, vgSems] = await Promise.all([
+    const [asistSems, vmSems, vgSems] = await Promise.all([
+      supabase.from("asistencias").select("semana").order("semana", { ascending: true }),
       supabase.from("ventas_mesero").select("semana").order("semana", { ascending: true }),
       supabase.from("ventas_grupo").select("semana").order("semana", { ascending: true }),
     ]);
 
-    const semanasVM = [...new Set((vmSems.data||[]).map(r => r.semana))];
-    const semanasVG = [...new Set((vgSems.data||[]).map(r => r.semana))];
+    const semanasAsist = [...new Set((asistSems.data||[]).map(r => r.semana))];
+    const semanasVM    = [...new Set((vmSems.data||[]).map(r => r.semana))];
+    const semanasVG    = [...new Set((vgSems.data||[]).map(r => r.semana))];
 
-    // Semana de ventas mesero más cercana a la semana seleccionada
+    // Semana más cercana para cada tipo de dato
+    const semanaAsist          = semanaParam
+      ? (semanaProxima(semana, semanasAsist) || semanasAsist[semanasAsist.length-1])
+      : semana;
     const semanaVentasActual   = semanaProxima(semana, semanasVM) || semanasVM[semanasVM.length-1];
-    // Semana de propinas = la anterior a semanaVentasActual
-    const idxSVA = semanasVM.indexOf(semanaVentasActual);
+    const idxSVA               = semanasVM.indexOf(semanaVentasActual);
     const semanaVentasPropinas = idxSVA > 0 ? semanasVM[idxSVA - 1] : semanaVentasActual;
-    // Semana de grupos más cercana
     const semanaGrupos         = semanaProxima(semana, semanasVG) || semanasVG[semanasVG.length-1];
 
     // ── Fetch paralelo ─────────────────────────────────────────────────────
@@ -67,14 +67,15 @@ router.get("/semana-actual", async (req, res) => {
       supabase.from("ventas_mesero").select("*").eq("semana", semanaVentasActual),
       supabase.from("ventas_mesero").select("*").eq("semana", semanaVentasPropinas),
       supabase.from("ventas_grupo").select("*").eq("semana", semanaGrupos),
-      supabase.from("asistencias").select("*").eq("semana", semana),
-      supabase.from("nomina_semanal").select("*").eq("semana", semana),
-      supabase.from("comida").select("*").eq("semana", semana),
+      supabase.from("asistencias").select("*").eq("semana", semanaAsist),
+      supabase.from("nomina_semanal").select("*").eq("semana", semanaAsist),
+      supabase.from("comida").select("*").eq("semana", semanaAsist),
     ]);
 
     res.json({
       ok: true,
-      semana,
+      semana:               semana,           // semana pedida por el selector
+      semanaAsist,                            // semana real de asistencias
       semanaVentasActual,
       semanaVentasPropinas,
       semanaGrupos,
@@ -116,7 +117,7 @@ router.get("/asistencias-anio", async (req, res) => {
       if (!porSemana[r.semana]) porSemana[r.semana] = [];
       porSemana[r.semana].push(r);
     });
-    res.json({ ok: true, semanas: Object.keys(porSemana).sort(), porSemana, total: (data||[]).length });
+    res.json({ ok:true, semanas:Object.keys(porSemana).sort(), porSemana, total:(data||[]).length });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -124,7 +125,7 @@ router.get("/historico", async (req, res) => {
   try {
     const { data } = await supabase.from("resumen_semanal")
       .select("*").order("semana", { ascending: false }).limit(52);
-    res.json({ ok: true, semanas: data || [] });
+    res.json({ ok:true, semanas: data || [] });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
