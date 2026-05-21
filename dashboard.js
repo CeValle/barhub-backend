@@ -1,28 +1,41 @@
 const router = require("express").Router();
 const { supabase } = require("./supabase");
 
+const PAD = n => String(n).padStart(2,"0");
+const FMT = d => `${d.getFullYear()}-${PAD(d.getMonth()+1)}-${PAD(d.getDate())}`;
+
+// Calcula la semana DOM-SAB actual
 function calcularSemanaActual() {
   const hoy = new Date();
   const dow  = hoy.getDay();
   const d    = dow === 0 ? 7 : dow;
   const dom  = new Date(hoy); dom.setDate(hoy.getDate() - d);
   const sab  = new Date(dom); sab.setDate(dom.getDate() + 6);
-  const fmt  = x => x.toISOString().split("T")[0];
-  return `${fmt(dom)}_a_${fmt(sab)}`;
+  return `${FMT(dom)}_a_${FMT(sab)}`;
 }
 
-// Fecha del sábado de una semana "YYYY-MM-DD_a_YYYY-MM-DD"
-function semanaFin(key) {
-  return new Date(key.split("_a_")[1] + "T23:59:59");
+// Dado un selector DOM-SAB → semana WED-SUN de ventas (dom+3 a dom+7)
+function semanaVentasDesdeSelector(selectorKey) {
+  const dom  = new Date(selectorKey.split("_a_")[0] + "T12:00:00");
+  const mier = new Date(dom); mier.setDate(dom.getDate() + 3);
+  const sun  = new Date(dom); sun.setDate(dom.getDate() + 7);
+  return `${FMT(mier)}_a_${FMT(sun)}`;
 }
 
-// Semana más cercana cuyo fin <= fin del target (la más reciente que no supera al target)
+// Semana WED-SUN de propinas = 7 días antes de la semana de ventas actual
+function semanaPropinasDesde(semanaVentas) {
+  const ini  = new Date(semanaVentas.split("_a_")[0] + "T12:00:00");
+  const pIni = new Date(ini); pIni.setDate(ini.getDate() - 7);
+  const pFin = new Date(pIni); pFin.setDate(pIni.getDate() + 4);
+  return `${FMT(pIni)}_a_${FMT(pFin)}`;
+}
+
+// Fallback: si no hay dato exacto, busca el más cercano disponible
 function semanaProxima(target, disponibles) {
-  if (!disponibles || !disponibles.length) return null;
-  const finTarget = semanaFin(target);
-  const candidatas = disponibles.filter(s => semanaFin(s) <= finTarget);
-  if (candidatas.length) return candidatas[candidatas.length - 1];
-  return disponibles[0];
+  if (!disponibles?.length) return null;
+  const finTarget = new Date(target.split("_a_")[1] + "T23:59:59");
+  const cands = disponibles.filter(s => new Date(s.split("_a_")[1] + "T23:59:59") <= finTarget);
+  return cands.length ? cands[cands.length - 1] : disponibles[0];
 }
 
 // GET /api/dashboard/semana-actual?semana=YYYY-MM-DD_a_YYYY-MM-DD
@@ -31,7 +44,7 @@ router.get("/semana-actual", async (req, res) => {
     const semanaParam = req.query.semana;
     let semana = semanaParam || calcularSemanaActual();
 
-    // Sin param → fallback a semana más reciente con datos
+    // Sin param → fallback al DOM-SAB con datos
     if (!semanaParam) {
       const chk = await supabase.from("asistencias")
         .select("semana").eq("semana", semana).limit(1);
@@ -42,27 +55,17 @@ router.get("/semana-actual", async (req, res) => {
       }
     }
 
-    // ── Todas las semanas disponibles ──────────────────────────────────────
-    const [asistSems, vmSems, vgSems] = await Promise.all([
-      supabase.from("asistencias").select("semana").order("semana", { ascending: true }),
-      supabase.from("ventas_mesero").select("semana").order("semana", { ascending: true }),
-      supabase.from("ventas_grupo").select("semana").order("semana", { ascending: true }),
-    ]);
+    // Semana WED-SUN de ventas y propinas derivada directamente del selector DOM-SAB
+    const semanaVentasActual   = semanaVentasDesdeSelector(semana);
+    const semanaVentasPropinas = semanaPropinasDesde(semanaVentasActual);
 
-    const semanasAsist = [...new Set((asistSems.data||[]).map(r => r.semana))];
-    const semanasVM    = [...new Set((vmSems.data||[]).map(r => r.semana))];
-    const semanasVG    = [...new Set((vgSems.data||[]).map(r => r.semana))];
+    // Para grupos usamos la misma clave WED-SUN que ventas
+    const semanaGrupos = semanaVentasActual;
 
-    // Semana más cercana para cada tipo de dato
-    const semanaAsist          = semanaParam
-      ? (semanaProxima(semana, semanasAsist) || semanasAsist[semanasAsist.length-1])
-      : semana;
-    const semanaVentasActual   = semanaProxima(semana, semanasVM) || semanasVM[semanasVM.length-1];
-    const idxSVA               = semanasVM.indexOf(semanaVentasActual);
-    const semanaVentasPropinas = idxSVA > 0 ? semanasVM[idxSVA - 1] : semanaVentasActual;
-    const semanaGrupos         = semanaProxima(semana, semanasVG) || semanasVG[semanasVG.length-1];
+    // Asistencias: semana exacta (DOM-SAB)
+    const semanaAsist = semana;
 
-    // ── Fetch paralelo ─────────────────────────────────────────────────────
+    // Fetch paralelo
     const [vmAct, vmProp, vgRes, asistRes, nominaRes, comidaRes] = await Promise.all([
       supabase.from("ventas_mesero").select("*").eq("semana", semanaVentasActual),
       supabase.from("ventas_mesero").select("*").eq("semana", semanaVentasPropinas),
@@ -72,17 +75,40 @@ router.get("/semana-actual", async (req, res) => {
       supabase.from("comida").select("*").eq("semana", semanaAsist),
     ]);
 
+    // Si no hay ventas exactas, buscar la más cercana como fallback
+    let ventasMesero = vmAct.data || [];
+    let ventasPropinas = vmProp.data || [];
+    let ventasGrupo = vgRes.data || [];
+
+    if (!ventasMesero.length) {
+      const all = await supabase.from("ventas_mesero").select("semana").order("semana", {ascending:true});
+      const sems = [...new Set((all.data||[]).map(v=>v.semana))];
+      const fb = semanaProxima(semana, sems);
+      if (fb && fb !== semanaVentasActual) {
+        const r = await supabase.from("ventas_mesero").select("*").eq("semana", fb);
+        ventasMesero = r.data || [];
+      }
+    }
+    if (!ventasGrupo.length) {
+      const all = await supabase.from("ventas_grupo").select("semana").order("semana", {ascending:true});
+      const sems = [...new Set((all.data||[]).map(v=>v.semana))];
+      const fb = semanaProxima(semana, sems);
+      if (fb && fb !== semanaGrupos) {
+        const r = await supabase.from("ventas_grupo").select("*").eq("semana", fb);
+        ventasGrupo = r.data || [];
+      }
+    }
+
     res.json({
       ok: true,
-      semana:               semana,           // semana pedida por el selector
-      semanaAsist,                            // semana real de asistencias
+      semana,
       semanaVentasActual,
       semanaVentasPropinas,
       semanaGrupos,
-      totalVentas:          (vgRes.data||[]).reduce((a,g) => a + (g.venta||0), 0),
-      ventasMesero:         vmAct.data  || [],
-      ventasMeseroPropinas: vmProp.data || [],
-      ventasGrupo:          vgRes.data  || [],
+      totalVentas:          ventasGrupo.reduce((a,g) => a + (g.venta||0), 0),
+      ventasMesero,
+      ventasMeseroPropinas: ventasPropinas,
+      ventasGrupo,
       asistencias:          asistRes.data  || [],
       nomina:               nominaRes.data || [],
       comida:               comidaRes.data || [],
@@ -97,7 +123,7 @@ router.post("/comida", async (req, res) => {
     const { semana, nombre, monto } = req.body;
     if (!semana || !nombre) return res.status(400).json({ ok:false, error:"Faltan campos" });
     const { error } = await supabase.from("comida").upsert(
-      { semana, nombre, monto: monto || 0, updated_at: new Date().toISOString() },
+      { semana, nombre, monto: monto||0, updated_at: new Date().toISOString() },
       { onConflict: "semana,nombre" }
     );
     if (error) throw error;
@@ -112,12 +138,12 @@ router.get("/asistencias-anio", async (req, res) => {
     const { data, error } = await supabase.from("asistencias")
       .select("*").like("semana", `${anio}%`).order("semana", { ascending: true });
     if (error) throw error;
-    const porSemana = {};
+    const ps = {};
     (data||[]).forEach(r => {
-      if (!porSemana[r.semana]) porSemana[r.semana] = [];
-      porSemana[r.semana].push(r);
+      if (!ps[r.semana]) ps[r.semana] = [];
+      ps[r.semana].push(r);
     });
-    res.json({ ok:true, semanas:Object.keys(porSemana).sort(), porSemana, total:(data||[]).length });
+    res.json({ ok:true, semanas:Object.keys(ps).sort(), porSemana:ps, total:(data||[]).length });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
