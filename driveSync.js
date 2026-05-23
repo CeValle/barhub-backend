@@ -109,12 +109,41 @@ async function extraerDatos(drive, fileId, tipo) {
   const b64  = Buffer.from(resp.data).toString("base64");
 
   const prompts = {
-    ventas_mesero: `Extrae los datos de ventas por mesero de este PDF de SoftRestaurant.
-Devuelve SOLO un JSON array sin texto adicional:
-[{"nombre":"...","venta":número,"prop_tarjeta":número,"efectivo":número,"comensales":número}]`,
-    ventas_grupo: `Extrae las ventas por grupo/categoría de este reporte SoftRestaurant.
-Devuelve SOLO un JSON array sin texto adicional:
-[{"grupo":"...","venta":número,"porcentaje":número}]`,
+    ventas_mesero: `Extrae datos de ventas por mesero de este PDF SoftRestaurant.
+Columnas del PDF: MESERO, VENTA, TARJETA, PROPINA, EFECTIVO, COMENSALES.
+- prop_tarjeta = columna TARJETA (monto pagado con tarjeta)
+- propina = columna PROPINA (propina en tarjeta, campo separado de TARJETA)
+Devuelve SOLO JSON array sin texto adicional:
+[{"nombre":"...","venta":número,"prop_tarjeta":número,"propina":número,"efectivo":número,"comensales":número}]`,
+    ventas_grupo: `Extrae las ventas por grupo de este reporte SoftRestaurant.
+La estructura tiene grupos principales y subgrupos. Devuelve TODOS según esta jerarquía exacta:
+SOLO JSON array sin texto adicional:
+[{"grupo":"Alimentos","venta":número,"es_subgrupo":false,"grupo_padre":null},
+{"grupo":"Extras","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Chun kun","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Hamburguesas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Pizzas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Boneless","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Costillas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Hotdog","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Nachos","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Papas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Bebidas","venta":número,"es_subgrupo":false,"grupo_padre":null},
+{"grupo":"Bebidas s/alcohol","venta":número,"es_subgrupo":true,"grupo_padre":"Bebidas"},
+{"grupo":"Cartones","venta":número,"es_subgrupo":false,"grupo_padre":null},
+{"grupo":"Cerveza","venta":número,"es_subgrupo":false,"grupo_padre":null},
+{"grupo":"Cerveza Artesanal","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
+{"grupo":"Cerveza Importada","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
+{"grupo":"Cerveza Nacional","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
+{"grupo":"Cubetas","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
+{"grupo":"Bull","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
+{"grupo":"Litros/Mezcladores","venta":número,"es_subgrupo":false,"grupo_padre":null},
+{"grupo":"Mixologia","venta":número,"es_subgrupo":false,"grupo_padre":null},
+{"grupo":"Fuertes","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
+{"grupo":"Refrescantes","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
+{"grupo":"Especialidades","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
+{"grupo":"Shots","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
+{"grupo":"Seltzers","venta":número,"es_subgrupo":false,"grupo_padre":null}]`,
     asistencias: `Extrae la asistencia de empleados de este reporte.
 Devuelve SOLO un JSON array sin texto adicional:
 [{"nombre":"...","horas_reales":número,"dias_asistidos":número}]`
@@ -154,7 +183,7 @@ async function syncSemanal() {
       await supabase.from("ventas_mesero").delete().eq("semana", semana);
       const { error } = await supabase.from("ventas_mesero").insert(
         datos.map(d => ({ semana, nombre:d.nombre, venta:+d.venta||0,
-          prop_tarjeta:+d.prop_tarjeta||0, efectivo:+d.efectivo||0,
+          prop_tarjeta:+d.prop_tarjeta||0, propina:+d.propina||0, efectivo:+d.efectivo||0,
           comensales:+d.comensales||0, updated_at:new Date().toISOString() }))
       );
       if (error) throw error;
@@ -175,7 +204,8 @@ async function syncSemanal() {
       await supabase.from("ventas_grupo").delete().eq("semana", semana);
       const { error } = await supabase.from("ventas_grupo").insert(
         datos.map(d => ({ semana, grupo:d.grupo||d.nombre||"", venta:+d.venta||0,
-          porcentaje:+d.porcentaje||0, updated_at:new Date().toISOString() }))
+          porcentaje:+d.porcentaje||0, es_subgrupo:d.es_subgrupo||false,
+          grupo_padre:d.grupo_padre||null, updated_at:new Date().toISOString() }))
       );
       if (error) throw error;
       resultado.procesados++; resultado.semanas.push(`vg:${semana}`);
