@@ -4,6 +4,7 @@ const { supabase } = require("./supabase");
 const PAD = n => String(n).padStart(2,"0");
 const FMT = d => `${d.getFullYear()}-${PAD(d.getMonth()+1)}-${PAD(d.getDate())}`;
 
+// Semana DOM-SAB actual
 function calcularSemanaActual() {
   const hoy = new Date(), dow = hoy.getDay(), d = dow === 0 ? 7 : dow;
   const dom = new Date(hoy); dom.setDate(hoy.getDate() - d);
@@ -11,7 +12,7 @@ function calcularSemanaActual() {
   return `${FMT(dom)}_a_${FMT(sab)}`;
 }
 
-// Selector DOM-SAB → semana WED-SUN de ventas (miércoles=dom+3, domingo=dom+7)
+// Selector DOM-SAB → semana WED-SUN de ventas (dom+3 a dom+7)
 function ventasDeSelector(selectorKey) {
   const dom  = new Date(selectorKey.split("_a_")[0] + "T12:00:00");
   const mier = new Date(dom); mier.setDate(dom.getDate() + 3);
@@ -27,21 +28,21 @@ function propinasDeVentas(semanaVentas) {
   return `${FMT(pIni)}_a_${FMT(pFin)}`;
 }
 
-// Semana más reciente disponible cuyo fin <= fin del target
+// Fallback: semana más reciente cuyo fin <= fin del target (solo para asistencias)
 function semanaProxima(target, disponibles) {
-  if (!disponibles || !disponibles.length) return null;
-  const finTarget = new Date(target.split("_a_")[1] + "T23:59:59");
-  const cands = disponibles.filter(s => new Date(s.split("_a_")[1] + "T23:59:59") <= finTarget);
-  if (cands.length) return cands[cands.length - 1];
-  return disponibles[disponibles.length - 1];
+  if (!disponibles?.length) return null;
+  const finT = new Date(target.split("_a_")[1] + "T23:59:59");
+  const cands = disponibles.filter(s => new Date(s.split("_a_")[1] + "T23:59:59") <= finT);
+  return cands.length ? cands[cands.length - 1] : disponibles[disponibles.length - 1];
 }
 
+// GET /api/dashboard/semana-actual?semana=YYYY-MM-DD_a_YYYY-MM-DD
 router.get("/semana-actual", async (req, res) => {
   try {
     const semanaParam = req.query.semana;
     const semana = semanaParam || calcularSemanaActual();
 
-    // Obtener semanas disponibles (con manejo de error)
+    // Semanas disponibles en Supabase
     const [ra, rm, rg] = await Promise.all([
       supabase.from("asistencias").select("semana").order("semana", { ascending: true }),
       supabase.from("ventas_mesero").select("semana").order("semana", { ascending: true }),
@@ -52,29 +53,30 @@ router.get("/semana-actual", async (req, res) => {
     const semsM = [...new Set((rm.data||[]).map(r => r.semana))];
     const semsG = [...new Set((rg.data||[]).map(r => r.semana))];
 
-    // Asistencias: semana exacta o la más reciente con datos
-    const semanaAsist = (semsA.includes(semana))
+    // ── Asistencias: exacta o la más reciente disponible (con fallback)
+    const semanaAsist = semsA.includes(semana)
       ? semana
-      : (semanaProxima(semana, semsA) || (semsA.length ? semsA[semsA.length-1] : null));
+      : (semanaProxima(semana, semsA) || null);
 
-    // Ventas actuales: WED-SUN derivado del selector DOM-SAB
-    const semanaVentasIdeal   = ventasDeSelector(semana);
-    const semanaVentasActual  = semsM.includes(semanaVentasIdeal)
-      ? semanaVentasIdeal
-      : (semanaProxima(semana, semsM) || (semsM.length ? semsM[semsM.length-1] : null));
+    // ── Ventas actuales: WED-SUN derivado del selector. SIN fallback.
+    // Si no hay PDF para esa semana → vacío.
+    const semanaVentasIdeal  = ventasDeSelector(semana);
+    const semanaVentasActual = semsM.includes(semanaVentasIdeal) ? semanaVentasIdeal : null;
 
-    // Propinas: semana WED-SUN anterior a ventas actuales
+    // ── Propinas: semana WED-SUN anterior a ventas actuales. SIN fallback.
+    // Si no hay ventas actuales o no hay PDF de la semana anterior → vacío.
     const semanaVentasPropinas = semanaVentasActual
-      ? propinasDeVentas(semanaVentasActual)
+      ? (semsM.includes(propinasDeVentas(semanaVentasActual))
+          ? propinasDeVentas(semanaVentasActual)
+          : null)
       : null;
 
-    // Grupos: misma clave WED-SUN que ventas
-    const semanaGruposIdeal = semanaVentasIdeal;
-    const semanaGrupos = semsG.includes(semanaGruposIdeal)
-      ? semanaGruposIdeal
-      : (semanaProxima(semana, semsG) || (semsG.length ? semsG[semsG.length-1] : null));
+    // ── Grupos: misma semana WED-SUN que ventas actuales. SIN fallback.
+    const semanaGrupos = semanaVentasActual && semsG.includes(semanaVentasActual)
+      ? semanaVentasActual
+      : null;
 
-    // Fetch paralelo con semanas calculadas
+    // ── Fetch paralelo con semanas calculadas ─────────────────────────────
     const [asistRes, vmAct, vmProp, vgRes, nominaRes, comidaRes] = await Promise.all([
       semanaAsist
         ? supabase.from("asistencias").select("*").eq("semana", semanaAsist)
@@ -96,7 +98,6 @@ router.get("/semana-actual", async (req, res) => {
         : Promise.resolve({ data: [] }),
     ]);
 
-    // Total ventas: solo grupos padre (es_subgrupo=false o null)
     const grupos = vgRes.data || [];
     const totalVentas = grupos
       .filter(g => !g.es_subgrupo)
