@@ -81,24 +81,34 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
   const mocheMap={},propMap={};
   (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();mocheMap[k]=(m.venta||0)*PCT_MOCHE;});
   const src=ventasProp&&ventasProp.length?ventasProp:ventas;
-  (src||[]).forEach(m=>{const k=m.nombre?.toLowerCase();propMap[k]=(m.propina??m.prop_tarjeta??m.propTarjeta??0)*(1-PCT_TERM);});
+  (src||[]).forEach(m=>{
+    const k=m.nombre?.toLowerCase();
+    const ovProp=(overrides||{})[k]?.propina;
+    const base=m.propina??m.prop_tarjeta??m.propTarjeta??0;
+    propMap[k]=(ovProp!=null?ovProp:base)*(1-PCT_TERM);
+  });
+  Object.entries(overrides||{}).forEach(([k,ov])=>{if(ov.propina!=null&&propMap[k]==null)propMap[k]=ov.propina*(1-PCT_TERM);});
   const totalMoche=Object.values(mocheMap).reduce((a,v)=>a+v,0);
   const pisoMap={};
   PISO.forEach(p=>{
+    const k=p.nombre.toLowerCase();
     const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===p.nombre.toLowerCase());
-    const hb=a?(a.horas_reales||0):0;
+    const ovHb=(overrides||{})[k]?.horasReales;
+    const hb=ovHb!=null?ovHb:(a?(a.horas_reales||0):0);
     const he=(p.hrsProg>0&&hb>=p.hrsProg*.9)?p.hrsProg:hb;
-    pisoMap[p.nombre.toLowerCase()]=p.hrsProg>0?((p.hrsProg/TOTAL_HRS)*totalMoche)*(he/p.hrsProg):0;
+    pisoMap[k]=p.hrsProg>0?((p.hrsProg/TOTAL_HRS)*totalMoche)*(he/p.hrsProg):0;
   });
   return EMPLEADOS_BASE.map(emp=>{
     const k=emp.nombre.toLowerCase();
     const pf=(overrides||{})[k]?.pagoFijo??emp.pagoFijo;
     const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
     const enDoc=emp.adminFijo||!!a;
-    const hb=(enDoc&&!emp.adminFijo)?(a?.horas_reales||0):0;
+    const ovHb=(overrides||{})[k]?.horasReales;
+    const hb=(enDoc&&!emp.adminFijo)?(ovHb!=null?ovHb:(a?.horas_reales||0)):0;
     const hp=emp.hrsProg||0;
     const completo=emp.adminFijo||(hp>0&&hb>=hp*.9);
-    const dias=emp.adminFijo?5:(a?.dias_asistidos||0);
+    const ovDias=(overrides||{})[k]?.diasAsistidos;
+    const dias=emp.adminFijo?5:(ovDias!=null?ovDias:(a?.dias_asistidos||0));
     let sueldo=0;
     if(!enDoc&&!emp.adminFijo)sueldo=0;
     else if(pf!=null)sueldo=(emp.adminFijo||completo)?pf:Math.round((hb/hp)*pf);
@@ -112,12 +122,13 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
 // ── UI COMPONENTS ─────────────────────────────────────────────────────────────
 function Av({n,c,size=26}){return <div style={{width:size,height:size,borderRadius:"50%",background:c+"22",border:"1px solid "+c+"44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.34,fontWeight:700,color:c,flexShrink:0}}>{(n||"?")[0].toUpperCase()}</div>;}
 function Badge({label,color,bg}){return <span style={{padding:"2px 7px",borderRadius:4,background:bg||color+"22",color,fontSize:8,fontWeight:700}}>{label}</span>;}
-function KPI({label,value,sub,color,trend}){
-  return <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:8,padding:"12px 14px"}}>
-    <div style={{fontSize:7,textTransform:"uppercase",letterSpacing:"0.1em",color:C.ink4,marginBottom:4}}>{label}</div>
+function KPI({label,value,sub,color,trend,onClick,active}){
+  return <div onClick={onClick} style={{background:C.s2,border:"1px solid "+(active?color:C.border),borderRadius:8,padding:"12px 14px",cursor:onClick?"pointer":"default",transition:"border-color .15s"}}>
+    <div style={{fontSize:7,textTransform:"uppercase",letterSpacing:"0.1em",color:active?color:C.ink4,marginBottom:4}}>{label}</div>
     <div style={{fontSize:18,fontWeight:800,color:color||C.ink,fontFamily:"monospace"}}>{value}</div>
     {sub&&<div style={{fontSize:8,color:C.ink4,marginTop:2}}>{sub}</div>}
     {trend!=null&&<div style={{fontSize:8,color:trend>=0?C.green:C.red,marginTop:2}}>{trend>=0?"↑":"↓"} {Math.abs(trend).toFixed(1)}% vs sem ant</div>}
+    {onClick&&<div style={{fontSize:7,color:active?color:C.ink4,marginTop:4}}>▾ {active?"cerrar":"ver desglose"}</div>}
   </div>;
 }
 function TH({cols}){return <thead><tr>{cols.map((c,i)=><th key={i} style={{padding:"8px 10px",textAlign:i>1?"right":"left",fontSize:7,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:C.ink4,borderBottom:"1px solid "+C.border,whiteSpace:"nowrap"}}>{c}</th>)}</tr></thead>;}
@@ -211,13 +222,87 @@ function PeriodSelector({semana,setSemanaOffset,semOffset,mes,anio}){
   );
 }
 
+// ── KPI DRILL-DOWN ───────────────────────────────────────────────────────────
+function KpiDrillDown({kpi,rows,data,ventasProp,onClose}){
+  const ventasActual=data.ventas||[];
+  const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
+  const titles={"ventas":"Ventas por mesero","nomina":"Detalle nómina","propinas":"Propinas tarjeta","sueldos":"Sueldos por empleado"};
+  return(
+    <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:10,padding:"14px 16px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <span style={{fontSize:8,fontWeight:700,letterSpacing:"0.13em",textTransform:"uppercase",color:C.ink4}}>{titles[kpi]}</span>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.ink4,fontSize:14,cursor:"pointer",padding:"0 4px"}}>✕</button>
+      </div>
+      {kpi==="ventas"&&<table style={{width:"100%",borderCollapse:"collapse"}}>
+        <TH cols={["Mesero","Venta","Prop. Tarjeta"]}/>
+        <tbody>
+          {ventasActual.map((m,i)=>{
+            const sp=src.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
+            const pt=sp?.propina??sp?.prop_tarjeta??0;
+            return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><Av n={m.nombre} c={C.blue} size={20}/><span style={{fontSize:10,fontWeight:600}}>{m.nombre}</span></div></td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.green,fontWeight:700}}>{mxnD(m.venta||0)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{pt>0?mxnD(pt):"-"}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>}
+      {kpi==="nomina"&&<table style={{width:"100%",borderCollapse:"collapse"}}>
+        <TH cols={["Empleado","Área","Sueldo","Moche","Prop.T","Prop.P","Comida","TOTAL"]}/>
+        <tbody>
+          {rows.map((r,i)=>{const col=AREA_COLOR[r.area]||C.ink4;return(
+            <tr key={i} style={{borderBottom:"1px solid "+C.border,background:i%2===0?"transparent":C.s3+"60"}}>
+              <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><Av n={r.nombre} c={col} size={20}/><span style={{fontSize:10,fontWeight:600}}>{r.nombre}</span></div></td>
+              <td style={{padding:"7px 10px"}}><Badge label={r.area} color={col} bg={col+"15"}/></td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:C.ink2}}>{r.sueldo>0?mxn(r.sueldo):"—"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.moche>0?C.red:C.ink4}}>{r.moche>0?"("+mxnD(r.moche)+")":"-"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.propTarjeta>0?C.teal:C.ink4}}>{r.propTarjeta>0?mxnD(r.propTarjeta):"-"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.propPiso>0?C.blue:C.ink4}}>{r.propPiso>0?mxnD(r.propPiso):"-"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.comida>0?C.red:C.ink4}}>{r.comida>0?"("+mxnD(r.comida)+")":"-"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",fontWeight:800,color:r.totalNeto>0?C.green:C.ink4}}>{r.totalNeto>0?mxnD(r.totalNeto):"—"}</td>
+            </tr>
+          );})}
+        </tbody>
+      </table>}
+      {kpi==="propinas"&&<table style={{width:"100%",borderCollapse:"collapse"}}>
+        <TH cols={["Mesero","Prop. bruta","−8% terminal","Neto"]}/>
+        <tbody>
+          {src.map((m,i)=>{const pr=m.propina??m.prop_tarjeta??0;const co=pr*PCT_TERM,ne=pr-co;return(
+            <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><Av n={m.nombre} c={C.teal} size={20}/><span style={{fontSize:10,fontWeight:600}}>{m.nombre}</span></div></td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxnD(pr)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>{co>0?"("+mxnD(co)+")":"-"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",fontWeight:800,color:ne>0?C.green:C.ink4}}>{ne>0?mxnD(ne):"—"}</td>
+            </tr>
+          );})}
+        </tbody>
+      </table>}
+      {kpi==="sueldos"&&<table style={{width:"100%",borderCollapse:"collapse"}}>
+        <TH cols={["Empleado","Área","Tipo","Sueldo bruto"]}/>
+        <tbody>
+          {rows.filter(r=>r.sueldo>0).map((r,i)=>{const col=AREA_COLOR[r.area]||C.ink4;return(
+            <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+              <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><Av n={r.nombre} c={col} size={20}/><span style={{fontSize:10,fontWeight:600}}>{r.nombre}</span></div></td>
+              <td style={{padding:"7px 10px"}}><Badge label={r.area} color={col} bg={col+"15"}/></td>
+              <td style={{padding:"7px 10px",fontSize:9,color:C.ink3}}>{r.adminFijo?"Fijo":r.pagoFijo!=null?"Fijo sem":"Por día"}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:700,color:C.blue}}>{mxn(r.sueldo)}</td>
+            </tr>
+          );})}
+        </tbody>
+      </table>}
+    </div>
+  );
+}
+
 // ── DASHBOARD EJECUTIVO ───────────────────────────────────────────────────────
-function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos}){
+function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab}){
+  const [activeKpi,setActiveKpi]=useState(null);
   const rows=calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
   const nomTotal=rows.reduce((a,r)=>a+r.totalNeto,0);
   const nomSueldos=rows.reduce((a,r)=>a+r.sueldo,0);
   const ventasTotal=(grupos||[]).filter(g=>!g.es_subgrupo).reduce((a,g)=>a+(g.venta||0),0)||(data.ventas||[]).reduce((a,m)=>a+(m.venta||0),0);
   const propTotal=ventasProp&&ventasProp.length?ventasProp.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0):0;
+  const toggle=id=>setActiveKpi(a=>a===id?null:id);
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -235,58 +320,147 @@ function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos}){
         </div>
       </div>
 
-      {/* KPIs principales */}
+      {/* KPIs principales — clic para desglose */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <KPI label="Ventas totales" value={mxnD(ventasTotal)} color={C.green}/>
-        <KPI label="Nómina neta" value={mxnD(nomTotal)} color={C.purple}/>
-        <KPI label="Propinas tarjeta" value={mxnD(propTotal)} sub="sem anterior" color={C.teal}/>
-        <KPI label="Sueldos brutos" value={mxnD(nomSueldos)} color={C.blue}/>
+        <KPI label="Ventas totales"   value={mxnD(ventasTotal)} color={C.green}  onClick={()=>toggle("ventas")}   active={activeKpi==="ventas"}/>
+        <KPI label="Nómina neta"      value={mxnD(nomTotal)}    color={C.purple} onClick={()=>toggle("nomina")}   active={activeKpi==="nomina"}/>
+        <KPI label="Propinas tarjeta" value={mxnD(propTotal)}   sub="sem anterior" color={C.teal} onClick={()=>toggle("propinas")} active={activeKpi==="propinas"}/>
+        <KPI label="Sueldos brutos"   value={mxnD(nomSueldos)}  color={C.blue}   onClick={()=>toggle("sueldos")}  active={activeKpi==="sueldos"}/>
       </div>
 
-      {/* Módulos — estado */}
+      {/* Drill-down panel */}
+      {activeKpi&&<KpiDrillDown kpi={activeKpi} rows={rows} data={data} ventasProp={ventasProp} onClose={()=>setActiveKpi(null)}/>}
+
+      {/* Módulos — clic para navegar a los activos */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
         {[
-          {label:"Nómina & Propinas",   icon:"◉",value:mxnD(nomTotal),   sub:"Total a pagar",   color:C.purple, ok:true},
-          {label:"Ventas",              icon:"◆",value:mxnD(ventasTotal), sub:"Venta semanal",   color:C.green,  ok:ventasTotal>0},
-          {label:"Compras",             icon:"🛒",value:"Próx.",           sub:"En desarrollo",   color:C.amber,  ok:false},
-          {label:"Inventarios",         icon:"📦",value:"Próx.",           sub:"En desarrollo",   color:C.orange, ok:false},
-          {label:"Balance General",     icon:"⚖",value:"Próx.",           sub:"En desarrollo",   color:C.blue,   ok:false},
-          {label:"Costeos",             icon:"🧮",value:"Próx.",           sub:"En desarrollo",   color:C.teal,   ok:false},
-          {label:"Tickets",             icon:"🧾",value:"Próx.",           sub:"En desarrollo",   color:C.pink,   ok:false},
-          {label:"Facturas",            icon:"📋",value:"Próx.",           sub:"En desarrollo",   color:C.red,    ok:false},
+          {label:"Nómina & Propinas",icon:"◉",value:mxnD(nomTotal),  sub:"Total a pagar", color:C.purple,ok:true,          navTo:"nomina"},
+          {label:"Ventas",           icon:"◆",value:mxnD(ventasTotal),sub:"Venta semanal", color:C.green, ok:ventasTotal>0, navTo:"ventas"},
+          {label:"Compras",          icon:"🛒",value:"Próx.",          sub:"En desarrollo", color:C.amber, ok:false,         navTo:null},
+          {label:"Inventarios",      icon:"📦",value:"Próx.",          sub:"En desarrollo", color:C.orange,ok:false,         navTo:null},
+          {label:"Balance General",  icon:"⚖",value:"Próx.",          sub:"En desarrollo", color:C.blue,  ok:false,         navTo:null},
+          {label:"Costeos",          icon:"🧮",value:"Próx.",          sub:"En desarrollo", color:C.teal,  ok:false,         navTo:null},
+          {label:"Tickets",          icon:"🧾",value:"Próx.",          sub:"En desarrollo", color:C.pink,  ok:false,         navTo:null},
+          {label:"Facturas",         icon:"📋",value:"Próx.",          sub:"En desarrollo", color:C.red,   ok:false,         navTo:null},
         ].map((m,i)=>(
-          <div key={i} style={{background:C.s2,border:"1px solid "+(m.ok?C.border:C.border),borderRadius:8,padding:"12px 14px",display:"flex",alignItems:"center",gap:12,opacity:m.ok?1:0.5}}>
+          <div key={i}
+            onClick={()=>m.ok&&m.navTo&&setTab&&setTab(m.navTo)}
+            onMouseEnter={e=>{if(m.ok&&m.navTo)e.currentTarget.style.borderColor=m.color;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
+            style={{background:C.s2,border:"1px solid "+C.border,borderRadius:8,padding:"12px 14px",display:"flex",alignItems:"center",gap:12,opacity:m.ok?1:0.5,cursor:m.ok&&m.navTo?"pointer":"default",transition:"border-color .15s"}}>
             <div style={{width:36,height:36,borderRadius:8,background:m.color+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{m.icon}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:8,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.08em"}}>{m.label}</div>
               <div style={{fontSize:15,fontWeight:700,color:m.ok?m.color:C.ink4,fontFamily:"monospace"}}>{m.value}</div>
-              <div style={{fontSize:8,color:C.ink4}}>{m.sub}</div>
+              <div style={{fontSize:8,color:C.ink4}}>{m.ok&&m.navTo?"→ ver detalle":m.sub}</div>
             </div>
             <div style={{width:8,height:8,borderRadius:"50%",background:m.ok?C.green:C.ink4,flexShrink:0}}/>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
 
-      {/* Resumen nómina */}
-      <Card title={"Nómina semana · "+semana.key}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <TH cols={["Empleado","Área","Sueldo","Moche","Prop.T","Prop.P","Comida","TOTAL"]}/>
-          <tbody>
-            {rows.map((r,i)=>{const col=AREA_COLOR[r.area]||C.ink4;const isAdmin=r.adminFijo;return(
-              <tr key={i} style={{borderBottom:"1px solid "+C.border,background:isAdmin?C.green+"08":i%2===0?"transparent":C.s3+"60"}}>
-                <td style={{padding:"8px 10px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Av n={r.nombre} c={col} size={22}/><span style={{fontSize:10,fontWeight:600}}>{r.nombre}</span></div></td>
-                <td style={{padding:"8px 10px"}}><Badge label={r.area} color={col} bg={col+"15"}/></td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:C.ink2}}>{r.sueldo>0?mxn(r.sueldo):"—"}</td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.moche>0?C.red:C.ink4}}>{r.moche>0?"("+mxnD(r.moche)+")":"-"}</td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.propTarjeta>0?C.teal:C.ink4}}>{r.propTarjeta>0?mxnD(r.propTarjeta):"-"}</td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.propPiso>0?C.blue:C.ink4}}>{r.propPiso>0?mxnD(r.propPiso):"-"}</td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:r.comida>0?C.red:C.ink4}}>{r.comida>0?"("+mxnD(r.comida)+")":"-"}</td>
-                <td style={{padding:"8px 10px",textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:800,color:r.totalNeto>0?C.green:C.ink4}}>{r.totalNeto>0?mxnD(r.totalNeto):"—"}</td>
-              </tr>
-            );})}
-          </tbody>
-        </table>
-      </Card>
+// ── MODAL EDITAR VALORES ─────────────────────────────────────────────────────
+function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
+  const [tabEdit,setTabEdit]=useState("salarios");
+  const ventasActual=data.ventas||[];
+  const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
+  const todosMeseros=[...ventasActual];
+  src.forEach(p=>{if(!todosMeseros.some(m=>m.nombre?.toLowerCase()===p.nombre?.toLowerCase()))todosMeseros.push({...p,venta:0});});
+  const TABS_EDIT=[
+    {id:"salarios",label:"Salarios",icon:"💰"},
+    {id:"horas",   label:"Horas",   icon:"⏱"},
+    {id:"dias",    label:"Días",    icon:"📅"},
+    {id:"propinas",label:"Propinas",icon:"✦"},
+  ];
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,padding:24,minWidth:400,maxHeight:"85vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>Editar Valores</div>
+            <div style={{fontSize:8,color:C.ink4,marginTop:2}}>Corrección manual · aplica solo esta sesión</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:C.ink4,fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"flex",gap:0,background:C.s3,borderRadius:7,overflow:"hidden",marginBottom:16,border:"1px solid "+C.border}}>
+          {TABS_EDIT.map(t=>(
+            <button key={t.id} onClick={()=>setTabEdit(t.id)} style={{flex:1,padding:"8px 2px",border:"none",borderRight:"1px solid "+C.border,background:tabEdit===t.id?C.s2:"none",color:tabEdit===t.id?C.green:C.ink4,fontSize:9,cursor:"pointer",fontWeight:tabEdit===t.id?700:400}}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+        {tabEdit==="salarios"&&EMPLEADOS_BASE.map(emp=>{
+          const k=emp.nombre.toLowerCase();
+          const val=(overrides||{})[k]?.pagoFijo??emp.pagoFijo??(emp.salDiario*5);
+          return(
+            <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
+              <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
+                <div style={{fontSize:8,color:C.ink4}}>{emp.adminFijo?"Fijo siempre":emp.pagoFijo!=null?"Fijo semanal":"Por día · $"+emp.salDiario+"/día"}</div>
+              </div>
+              <input type="number" value={val||""} onChange={e=>{const v=parseInt(e.target.value)||null;setOverrides(p=>({...p,[k]:{...p[k],pagoFijo:v}}));}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.green,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+            </div>
+          );
+        })}
+        {tabEdit==="horas"&&EMPLEADOS_BASE.filter(e=>!e.adminFijo).map(emp=>{
+          const k=emp.nombre.toLowerCase();
+          const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
+          const base=a?(a.horas_reales||0):0;
+          const val=(overrides||{})[k]?.horasReales??base;
+          return(
+            <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
+              <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
+                <div style={{fontSize:8,color:C.ink4}}>Prog: {emp.hrsProg}h · Drive: {base}h</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <input type="number" min="0" value={val==null?"":val} onChange={e=>{const v=e.target.value===""?null:(parseInt(e.target.value)||0);setOverrides(p=>({...p,[k]:{...p[k],horasReales:v}}));}} style={{width:64,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.blue,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+                <span style={{fontSize:9,color:C.ink4}}>h</span>
+              </div>
+            </div>
+          );
+        })}
+        {tabEdit==="dias"&&EMPLEADOS_BASE.filter(e=>!e.adminFijo).map(emp=>{
+          const k=emp.nombre.toLowerCase();
+          const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
+          const base=a?(a.dias_asistidos||0):0;
+          const val=(overrides||{})[k]?.diasAsistidos??base;
+          return(
+            <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
+              <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
+                <div style={{fontSize:8,color:C.ink4}}>Drive: {base} días · ${emp.salDiario}/día</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <input type="number" min="0" max="7" value={val==null?"":val} onChange={e=>{const v=e.target.value===""?null:(parseInt(e.target.value)||0);setOverrides(p=>({...p,[k]:{...p[k],diasAsistidos:v}}));}} style={{width:52,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.amber,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+                <span style={{fontSize:9,color:C.ink4}}>días</span>
+              </div>
+            </div>
+          );
+        })}
+        {tabEdit==="propinas"&&todosMeseros.map((m,i)=>{
+          const k=m.nombre?.toLowerCase();
+          const sp=src.find(p=>p.nombre?.toLowerCase()===k);
+          const base=sp?.propina??sp?.prop_tarjeta??0;
+          const val=(overrides||{})[k]?.propina??base;
+          return(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
+              <Av n={m.nombre} c={C.blue} size={28}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600}}>{m.nombre}</div>
+                <div style={{fontSize:8,color:C.ink4}}>Drive: {mxnD(base)} · bruto (sin −8%)</div>
+              </div>
+              <input type="number" value={val||""} onChange={e=>{const v=parseFloat(e.target.value)||null;setOverrides(p=>({...p,[k]:{...p[k],propina:v}}));}} style={{width:96,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.teal,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -303,36 +477,13 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
   const save=(n,m)=>fetch(API+"/api/dashboard/comida",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({semana:semana.key,nombre:n,monto:m})});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      {showSal&&(
-        <div style={{position:"fixed",inset:0,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-          <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,padding:24,minWidth:340,maxHeight:"80vh",overflowY:"auto"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <span style={{fontSize:13,fontWeight:700}}>Editar Salarios Semanales</span>
-              <button onClick={()=>setShowSal(false)} style={{background:"none",border:"none",color:C.ink4,fontSize:18,cursor:"pointer"}}>✕</button>
-            </div>
-            {EMPLEADOS_BASE.map(emp=>{
-              const k=emp.nombre.toLowerCase();
-              const val=(overrides||{})[k]?.pagoFijo??emp.pagoFijo??(emp.salDiario*5);
-              return(
-                <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
-                  <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
-                    <div style={{fontSize:8,color:C.ink4}}>{emp.adminFijo?"Fijo siempre":emp.pagoFijo!=null?"Fijo semanal":"Por día"}</div>
-                  </div>
-                  <input type="number" value={val||""} onChange={e=>{const v=parseInt(e.target.value)||null;setOverrides(p=>({...p,[k]:{...p[k],pagoFijo:v}}));}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.green,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {showSal&&<ModalEditar overrides={overrides} setOverrides={setOverrides} data={data} ventasProp={ventasProp} onClose={()=>setShowSal(false)}/>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         <KPI label="Sueldos brutos" value={mxn(ts)} color={C.purple}/>
         <KPI label="Comida deducida" value={tcm>0?"("+mxn(tcm)+")":"$0"} color={C.red}/>
         <KPI label="Total neto a pagar" value={mxnD(tNet)} color={C.green}/>
       </div>
-      <Card title={"Nómina · "+semana.label} action={<button onClick={()=>setShowSal(true)} style={{padding:"3px 10px",borderRadius:5,border:"1px solid "+C.border,background:C.s3,color:C.ink3,fontSize:8,cursor:"pointer"}}>✎ Salarios</button>}>
+      <Card title={"Nómina · "+semana.label} action={<button onClick={()=>setShowSal(true)} style={{padding:"3px 10px",borderRadius:5,border:"1px solid "+C.border,background:C.s3,color:C.ink3,fontSize:8,cursor:"pointer"}}>✎ Editar</button>}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <TH cols={["Empleado","Área","Días","Sueldo","Moche","Prop.T","Prop.P","Comida 🍽","TOTAL"]}/>
           <tbody>
@@ -368,14 +519,15 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
 }
 
 // ── TAB PROPINAS ──────────────────────────────────────────────────────────────
-function TabPropinas({data,semana,ventasProp,semPropKey}){
+function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
   const ventasActual=data.ventas||[];
   const tm=ventasActual.reduce((a,m)=>a+(m.venta||0),0)*PCT_MOCHE;
   const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
-  const tt=src.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0);
+  const srcEff=src.map(m=>{const k=m.nombre?.toLowerCase();const ov=(overrides||{})[k]?.propina;return ov!=null?{...m,propina:ov,prop_tarjeta:ov}:m;});
+  const tt=srcEff.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0);
   const nt=tt*(1-PCT_TERM);
   const todos=[...ventasActual];
-  src.forEach(p=>{if(!todos.some(m=>m.nombre?.toLowerCase()===p.nombre?.toLowerCase()))todos.push({...p,venta:0});});
+  srcEff.forEach(p=>{if(!todos.some(m=>m.nombre?.toLowerCase()===p.nombre?.toLowerCase()))todos.push({...p,venta:0});});
   const rep=PISO.map(p=>{
     const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===p.nombre.toLowerCase());
     const hb=a?(a.horas_reales||0):0;
@@ -398,7 +550,7 @@ function TabPropinas({data,semana,ventasProp,semPropKey}){
           <tbody>
             {todos.map((m,i)=>{
               const mc=(m.venta||0)*PCT_MOCHE;
-              const mp=src.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
+              const mp=srcEff.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
               const pr=mp?.propina??mp?.prop_tarjeta??0;
               const co=pr*PCT_TERM,ne=pr-co;
               return(
@@ -980,7 +1132,7 @@ function App(){
   const stCol={idle:C.ink4,checking:C.amber,online:C.green,offline:C.red,sync:C.blue}[status]||C.ink4;
 
   const renderContent=()=>{
-    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial};
+    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,setTab};
     switch(tab){
       case "dashboard":   return <TabDashboard {...props}/>;
       case "nomina":      return <TabNomina {...props}/>;
