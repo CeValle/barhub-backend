@@ -33,16 +33,16 @@ const AREA_COLOR={Caja:C.purple,Barra:C.teal,Cocina:C.amber,Mesero:C.blue,Admin:
 
 // ── EMPLEADOS & CONSTANTES ───────────────────────────────────────────────────
 const EMPLEADOS_BASE=[
-  {nombre:"Yulisa", area:"Caja",    dept:"compartido",salDiario:1000,hrsProg:20,pagoFijo:2000,adminFijo:false},
-  {nombre:"Alexis", area:"Barra",   dept:"cocina",    salDiario:700, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Omar",   area:"Barra",   dept:"cocina",    salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
-  {nombre:"Angel",  area:"Mesero",  dept:"bar",       salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Saul",   area:"Mesero",  dept:"compartido",salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
-  {nombre:"Edith",  area:"Cocina",  dept:"compartido",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Jorge",  area:"Cocina",  dept:"compartido",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Erick",  area:"Comodín", dept:"compartido",salDiario:500, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Andrea", area:"Admin",   dept:"compartido",salDiario:800, hrsProg:46,pagoFijo:4000,adminFijo:true},
-  {nombre:"Gerardo",area:"Admin",   dept:"compartido",salDiario:1200,hrsProg:46,pagoFijo:6000,adminFijo:true},
+  {nombre:"Yulisa", area:"Caja",    dept:"bar",   salDiario:1000,hrsProg:20,pagoFijo:2000,adminFijo:false},
+  {nombre:"Alexis", area:"Barra",   dept:"bar",   salDiario:700, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Omar",   area:"Barra",   dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
+  {nombre:"Angel",  area:"Mesero",  dept:"bar",   salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Saul",   area:"Mesero",  dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
+  {nombre:"Edith",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Jorge",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Erick",  area:"Comodín", dept:"bar",   salDiario:500, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Andrea", area:"Admin",   dept:"admin", salDiario:800, hrsProg:46,pagoFijo:4000,adminFijo:true},
+  {nombre:"Gerardo",area:"Admin",   dept:"admin", salDiario:1200,hrsProg:46,pagoFijo:6000,adminFijo:true},
 ];
 const PISO=[
   {nombre:"Yulisa",area:"Caja",  hrsProg:20},
@@ -1226,7 +1226,7 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
   const nomina    = calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
 
   // ── Gastos Fijos form state ──────────────────────────────────────────────
-  const [gfEdit,setGfEdit]=useState(null); // {concepto,area,monto}
+  const [gfEdit,setGfEdit]=useState(null);
   const [gfSaving,setGfSaving]=useState(false);
 
   const saveGF=async(concepto,area,monto)=>{
@@ -1237,7 +1237,6 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
     setGfSaving(false);setGfEdit(null);
     if(loadData)await loadData(semana.key);
   };
-
   const delGF=async(id)=>{
     if(!confirm("¿Eliminar este gasto fijo?"))return;
     await fetch(API+"/api/gastos/"+id,{method:"DELETE",headers:{"x-app-secret":"BarHub2026"}});
@@ -1245,25 +1244,32 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
   };
 
   // ── Ventas split ──────────────────────────────────────────────────────────
-  const topGrupos=grupos.filter(g=>!g.es_subgrupo);
-  const ventasBar   =topGrupos.filter(g=>g.grupo!=="Alimentos").reduce((a,g)=>a+(g.venta||0),0);
-  const ventasCocina=topGrupos.filter(g=>g.grupo==="Alimentos").reduce((a,g)=>a+(g.venta||0),0);
-  const ventasTot   =ventasBar+ventasCocina;
-  const barPct  =ventasTot>0?ventasBar/ventasTot:0.7;
-  const cocPct  =1-barPct;
+  // Fuente primaria: ventas_grupo (top-level). Fallback: ventas_mesero total sin split.
+  const hasGrupos=grupos&&grupos.length>0;
+  const topGrupos=(grupos||[]).filter(g=>!g.es_subgrupo);
+  const ventasBar   =hasGrupos?topGrupos.filter(g=>g.grupo!=="Alimentos").reduce((a,g)=>a+(g.venta||0),0):0;
+  const ventasCocina=hasGrupos?topGrupos.filter(g=>g.grupo==="Alimentos").reduce((a,g)=>a+(g.venta||0),0):0;
+  // Si no hay grupos usar ventas_mesero como total (sin split)
+  const ventasFallback=!hasGrupos?(data.ventas||[]).reduce((a,m)=>a+(m.venta||0),0):0;
+  const ventasTot=hasGrupos?(ventasBar+ventasCocina):ventasFallback;
 
   // ── Nómina split ──────────────────────────────────────────────────────────
-  const nomBar  =nomina.filter(e=>e.dept==="bar")       .reduce((a,e)=>a+e.total,0);
-  const nomCoc  =nomina.filter(e=>e.dept==="cocina")    .reduce((a,e)=>a+e.total,0);
-  const nomComp =nomina.filter(e=>e.dept==="compartido").reduce((a,e)=>a+e.total,0);
-  const nomBarT =nomBar +nomComp*barPct;
-  const nomCocT =nomCoc +nomComp*cocPct;
-  const nomTot  =nomBarT+nomCocT;
+  // Bar: Mesero, Barra, Caja, Comodín (dept="bar")
+  // Cocina: área "Cocina" (dept="cocina")
+  // Admin: Andrea, Gerardo (dept="admin") → línea propia, suma a Bar en utilidad
+  const nomBar  =nomina.filter(e=>e.dept==="bar")  .reduce((a,e)=>a+e.total,0);
+  const nomCoc  =nomina.filter(e=>e.dept==="cocina").reduce((a,e)=>a+e.total,0);
+  const nomAdmin=nomina.filter(e=>e.dept==="admin") .reduce((a,e)=>a+e.total,0);
+  const nomBarConAdmin=nomBar+nomAdmin; // para cálculo de utilidad Bar
+  const nomTot  =nomBar+nomCoc+nomAdmin;
 
   // ── Compras split ─────────────────────────────────────────────────────────
   const cpBar  =compras.filter(c=>c.area==="bar")       .reduce((a,c)=>a+(c.monto||0),0);
   const cpCoc  =compras.filter(c=>c.area==="cocina")    .reduce((a,c)=>a+(c.monto||0),0);
   const cpComp =compras.filter(c=>c.area==="compartido").reduce((a,c)=>a+(c.monto||0),0);
+  // Compartido se reparte por % de ventas (o 70/30 si no hay split)
+  const barPct =ventasTot>0&&hasGrupos?ventasBar/ventasTot:0.7;
+  const cocPct =1-barPct;
   const cpBarT =cpBar +cpComp*barPct;
   const cpCocT =cpCoc +cpComp*cocPct;
   const cpTot  =cpBarT+cpCocT;
@@ -1276,37 +1282,50 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
   const gfCocT =(gfCoc +gfComp*cocPct)/4.33;
   const gfTot  =gfBarT+gfCocT;
 
-  // ── Utilidades ───────────────────────────────────────────────────────────
-  const utilBar=ventasBar-nomBarT-cpBarT-gfBarT;
-  const utilCoc=ventasCocina-nomCocT-cpCocT-gfCocT;
-  const utilTot=ventasTot-nomTot-cpTot-gfTot;
+  // ── Utilidades ────────────────────────────────────────────────────────────
+  const utilBar=ventasBar -nomBarConAdmin-cpBarT-gfBarT;
+  const utilCoc=ventasCocina-nomCoc     -cpCocT-gfCocT;
+  const utilTot=ventasTot  -nomTot      -cpTot -gfTot;
   const margen =ventasTot>0?utilTot/ventasTot*100:0;
 
-  const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal};
-  const areaLabel={bar:"Bar",cocina:"Cocina",compartido:"Compartido"};
+  const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal,admin:C.purple};
+  const areaLabel={bar:"Bar",cocina:"Cocina",compartido:"Compartido",admin:"Admin"};
+  const mesNombre=gastosMes.mes?MESES[(gastosMes.mes||1)-1]+" "+gastosMes.año:"";
 
-  const Row=({label,bar,coc,tot,isNeg,bold,color})=>(
+  // Row helper: [bar col, cocina col, total col]
+  const Row=({label,bar,coc,tot,isNeg,bold,sub})=>(
     <tr style={{borderTop:"1px solid "+C.border}}>
-      <td style={{padding:"7px 12px",fontSize:11,color:bold?C.ink:C.ink3,fontWeight:bold?700:400}}>{label}</td>
+      <td style={{padding:"7px 12px",fontSize:11,color:bold?C.ink:C.ink3,fontWeight:bold?700:400}}>
+        {label}{sub&&<span style={{fontSize:9,color:C.ink4,marginLeft:6}}>{sub}</span>}
+      </td>
       {[bar,coc,tot].map((v,i)=>{
-        const neg=isNeg||v<0; const col=color||(neg?C.red:(v>0?C.green:C.ink3));
-        return <td key={i} style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:bold?700:500,fontSize:11,color:col}}>
-          {isNeg&&v>0?"("+mxn(v)+")":mxn(Math.abs(v))}
-        </td>;
+        const col=isNeg?C.red:(v>0?C.green:v<0?C.red:C.ink4);
+        const display=isNeg&&v>0?"("+mxn(v)+")":mxn(Math.abs(v));
+        return <td key={i} style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:bold?700:500,fontSize:11,color:col}}>{display}</td>;
       })}
     </tr>
   );
 
-  const mesNombre=gastosMes.mes?MESES[(gastosMes.mes||1)-1]+" "+gastosMes.año:"";
-
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* Aviso sin datos de ventas por grupo */}
+      {!hasGrupos&&ventasFallback===0&&(
+        <div style={{background:C.s2,border:"1px dashed "+C.amber,borderRadius:8,padding:"10px 14px",fontSize:11,color:C.amber}}>
+          ⚠ Sin datos de ventas para esta semana. Sincroniza Drive o selecciona otra semana.
+        </div>
+      )}
+      {!hasGrupos&&ventasFallback>0&&(
+        <div style={{background:C.s2,border:"1px dashed "+C.amber,borderRadius:8,padding:"10px 14px",fontSize:11,color:C.amber}}>
+          ⚠ Sin ventas por grupo — mostrando total de ventas_mesero sin split Bar/Cocina. Sincroniza Drive para ver el desglose.
+        </div>
+      )}
+
       {/* KPI resumen */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <KPI label="Ventas totales"  value={mxn(ventasTot)}  color={C.green}/>
-        <KPI label="Egresos totales" value={"("+mxn(nomTot+cpTot+gfTot)+")"}  color={C.red}/>
-        <KPI label="Utilidad bruta"  value={mxn(utilTot)}    color={utilTot>=0?C.green:C.red}/>
-        <KPI label="Margen"          value={pct(margen)}     color={margen>=0?C.teal:C.red}/>
+        <KPI label="Ventas totales"  value={mxn(ventasTot)}                  color={C.green}/>
+        <KPI label="Egresos totales" value={"("+mxn(nomTot+cpTot+gfTot)+")"} color={C.red}/>
+        <KPI label="Utilidad bruta"  value={mxn(utilTot)}                    color={utilTot>=0?C.green:C.red}/>
+        <KPI label="Margen"          value={pct(margen)}                      color={margen>=0?C.teal:C.red}/>
       </div>
 
       {/* Estado de resultados */}
@@ -1314,7 +1333,7 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
         <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Estado de Resultados</span>
           <div style={{display:"flex",gap:16}}>
-            {[{l:"Bar",c:C.blue},{l:"Cocina",c:C.amber},{l:"Total",c:C.green}].map(({l,c})=>(
+            {[{l:"Bar",c:C.blue},{l:"Restaurante",c:C.amber},{l:"Total",c:C.green}].map(({l,c})=>(
               <span key={l} style={{fontSize:9,fontWeight:700,color:c,textTransform:"uppercase"}}>{l}</span>
             ))}
           </div>
@@ -1322,15 +1341,27 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:C.s3}}>
-              <th style={{padding:"6px 12px",textAlign:"left",fontSize:9,color:C.ink4,fontWeight:600,width:"40%"}}>CONCEPTO</th>
-              {["BAR","COCINA","TOTAL"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"right",fontSize:9,color:C.ink4,fontWeight:600}}>{h}</th>)}
+              <th style={{padding:"6px 12px",textAlign:"left",fontSize:9,color:C.ink4,fontWeight:600,width:"42%"}}>CONCEPTO</th>
+              {["BAR","RESTAURANTE","TOTAL"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"right",fontSize:9,color:C.ink4,fontWeight:600}}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
-            <Row label="Ventas"          bar={ventasBar}  coc={ventasCocina} tot={ventasTot}  bold/>
-            <Row label="(−) Nómina"      bar={nomBarT}    coc={nomCocT}      tot={nomTot}     isNeg/>
-            <Row label="(−) Compras"     bar={cpBarT}     coc={cpCocT}       tot={cpTot}      isNeg/>
-            <Row label="(−) Gastos Fijos"bar={gfBarT}     coc={gfCocT}       tot={gfTot}      isNeg/>
+            {/* Ventas */}
+            <Row label="Ventas" bar={hasGrupos?ventasBar:ventasFallback} coc={hasGrupos?ventasCocina:0} tot={ventasTot} bold/>
+            {!hasGrupos&&ventasFallback>0&&(
+              <tr><td colSpan={4} style={{padding:"2px 12px 6px",fontSize:9,color:C.ink4}}>
+                * Sin split por grupo. Bar / Restaurante = 0 hasta sincronizar ventas_grupo.
+              </td></tr>
+            )}
+            {/* Nómina */}
+            <Row label="(−) Nómina Bar"   bar={nomBar}       coc={0}       tot={nomBar}        isNeg sub="Mesero/Barra/Caja/Comodín"/>
+            <Row label="(−) Nómina Admin" bar={nomAdmin}     coc={0}       tot={nomAdmin}       isNeg sub="Andrea/Gerardo"/>
+            <Row label="(−) Nómina Cocina"bar={0}            coc={nomCoc}  tot={nomCoc}         isNeg sub="Personal cocina"/>
+            {/* Compras */}
+            <Row label="(−) Compras"      bar={cpBarT}       coc={cpCocT}  tot={cpTot}          isNeg/>
+            {/* Gastos Fijos */}
+            <Row label="(−) Gastos Fijos" bar={gfBarT}       coc={gfCocT}  tot={gfTot}          isNeg sub="semanal prorr."/>
+            {/* Utilidad */}
             <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
               <td style={{padding:"9px 12px",fontSize:12,fontWeight:800,color:C.ink}}>Utilidad</td>
               {[utilBar,utilCoc,utilTot].map((v,i)=>(
@@ -1351,12 +1382,12 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
       <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
         <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Gastos Fijos — {mesNombre}</span>
-          <span style={{fontSize:9,color:C.ink4}}>Se prorratea ÷ 4.33 semanas por semana del balance</span>
+          <span style={{fontSize:9,color:C.ink4}}>Prorrateado ÷ 4.33 semanas/mes</span>
         </div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:C.s3}}>
-              {["Concepto","Área","Monto mensual","Semanal (÷4.33)",""].map((h,i)=>(
+              {["Concepto","Área","Mensual","Semanal",""].map((h,i)=>(
                 <th key={i} style={{padding:"6px 12px",textAlign:i>=2&&i<4?"right":"left",fontSize:9,color:C.ink4,fontWeight:600,textTransform:"uppercase"}}>{h}</th>
               ))}
             </tr>
