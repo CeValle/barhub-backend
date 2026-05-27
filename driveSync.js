@@ -78,16 +78,13 @@ function semanaGrupo(nombre) {
   if (!m) return null;
   const numSem = +m[1], mes = MESES[m[2].toLowerCase()], año = m[3] ? +m[3] : 2026;
   if (!mes) return null;
-  // Sem N = N-esima semana DOM-SAB del mes
-  // La WED de esa semana = primerDom + (N-1)*7 + 3 dias
-  // El SUN de esa semana = primerDom + (N-1)*7 + 7 dias
+  // Primer miércoles del mes (dow=3), luego + (N-1)*7
   const p = new Date(año, mes-1, 1);
-  const dDom = p.getDay(); // 0=dom
-  const diasAlDom = dDom === 0 ? 0 : 7 - dDom;
-  const primerDom = new Date(año, mes-1, 1 + diasAlDom);
-  const domN = new Date(primerDom); domN.setDate(primerDom.getDate() + (numSem-1)*7);
-  const mier = new Date(domN); mier.setDate(domN.getDate() + 3);
-  const sun  = new Date(domN); sun.setDate(domN.getDate() + 7);
+  const dow = p.getDay();
+  const diasAlMier = dow <= 3 ? 3 - dow : 10 - dow;
+  const primerMier = new Date(año, mes-1, 1 + diasAlMier);
+  const mier = new Date(primerMier); mier.setDate(primerMier.getDate() + (numSem-1)*7);
+  const sun  = new Date(mier); sun.setDate(mier.getDate() + 4);
   return `${FMT(mier)}_a_${FMT(sun)}`;
 }
 
@@ -123,6 +120,7 @@ SOLO JSON array sin texto adicional:
 {"grupo":"Chun kun","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
 {"grupo":"Hamburguesas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
 {"grupo":"Pizzas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
+{"grupo":"Alitas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
 {"grupo":"Boneless","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
 {"grupo":"Costillas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
 {"grupo":"Hotdog","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
@@ -167,9 +165,9 @@ Devuelve SOLO un JSON array sin texto adicional:
 }
 
 // ── Sync principal ───────────────────────────────────────────────────────────
-async function syncSemanal() {
+async function syncSemanal(force = false) {
   const drive     = getDriveClient();
-  const resultado = { procesados:0, errores:[], semanas:[] };
+  const resultado = { procesados:0, saltados:0, errores:[], semanas:[] };
 
   // 1. Ventas por mesero (MIÉ-DOM)
   console.log("[SYNC] Buscando ventas/mesero...");
@@ -177,6 +175,10 @@ async function syncSemanal() {
     try {
       const semana = semanaVentas(parsearNombre(pdf.name));
       if (!semana) { console.log(`[SYNC] Sin fecha: ${pdf.name}`); continue; }
+      if (!force) {
+        const { count } = await supabase.from("ventas_mesero").select("*",{count:"exact",head:true}).eq("semana",semana);
+        if (count > 0) { console.log(`[SYNC] vm:${semana} ya registrado, saltando`); resultado.saltados++; resultado.semanas.push(`vm:${semana}:skip`); continue; }
+      }
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "ventas_mesero");
       if (!datos.length) continue;
@@ -198,6 +200,10 @@ async function syncSemanal() {
     try {
       const semana = semanaGrupo(pdf.name);
       if (!semana) { console.log(`[SYNC] Sin semana: ${pdf.name}`); continue; }
+      if (!force) {
+        const { count } = await supabase.from("ventas_grupo").select("*",{count:"exact",head:true}).eq("semana",semana);
+        if (count > 0) { console.log(`[SYNC] vg:${semana} ya registrado, saltando`); resultado.saltados++; resultado.semanas.push(`vg:${semana}:skip`); continue; }
+      }
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "ventas_grupo");
       if (!datos.length) continue;
@@ -219,6 +225,10 @@ async function syncSemanal() {
     try {
       const semana = semanaAsistencias(parsearNombre(pdf.name));
       if (!semana) { console.log(`[SYNC] Sin semana: ${pdf.name}`); continue; }
+      if (!force) {
+        const { count } = await supabase.from("asistencias").select("*",{count:"exact",head:true}).eq("semana",semana);
+        if (count > 0) { console.log(`[SYNC] asist:${semana} ya registrado, saltando`); resultado.saltados++; resultado.semanas.push(`asist:${semana}:skip`); continue; }
+      }
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "asistencias");
       if (!datos.length) continue;

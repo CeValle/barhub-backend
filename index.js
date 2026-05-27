@@ -13,6 +13,8 @@ app.use("/api/sync",      require("./sync"));
 app.use("/api/nomina",    require("./nomina"));
 app.use("/api/propinas",  require("./propinas"));
 app.use("/api/dashboard", require("./dashboard"));
+app.use("/api/compras",   require("./compras"));
+app.use("/api/gastos",    require("./gastos"));
 
 app.get("/health", (_req, res) => res.json({ ok: true, project: "barhub", ts: new Date().toISOString() }));
 

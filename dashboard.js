@@ -76,8 +76,14 @@ router.get("/semana-actual", async (req, res) => {
       ? semanaVentasActual
       : null;
 
+    // Extraer año/mes del selector para gastos fijos
+    const [selIni] = semana.split("_a_");
+    const selDate  = new Date(selIni + "T12:00:00");
+    const selAño   = selDate.getFullYear();
+    const selMes   = selDate.getMonth() + 1;
+
     // ── Fetch paralelo con semanas calculadas ─────────────────────────────
-    const [asistRes, vmAct, vmProp, vgRes, nominaRes, comidaRes] = await Promise.all([
+    const [asistRes, vmAct, vmProp, vgRes, nominaRes, comidaRes, comprasRes, gastosRes] = await Promise.all([
       semanaAsist
         ? supabase.from("asistencias").select("*").eq("semana", semanaAsist)
         : Promise.resolve({ data: [] }),
@@ -96,6 +102,8 @@ router.get("/semana-actual", async (req, res) => {
       semanaAsist
         ? supabase.from("comida").select("*").eq("semana", semanaAsist)
         : Promise.resolve({ data: [] }),
+      supabase.from("compras").select("*").eq("semana", semana).order("fecha"),
+      supabase.from("gastos_fijos").select("*").eq("año", selAño).eq("mes", selMes).order("concepto"),
     ]);
 
     const grupos = vgRes.data || [];
@@ -118,6 +126,9 @@ router.get("/semana-actual", async (req, res) => {
       asistencias:          asistRes.data  || [],
       nomina:               nominaRes.data || [],
       comida:               comidaRes.data || [],
+      compras:              comprasRes.data || [],
+      gastosFijos:          gastosRes.data  || [],
+      gastosMes:            { año: selAño, mes: selMes },
     });
 
   } catch(e) {

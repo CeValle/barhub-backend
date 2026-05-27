@@ -8,8 +8,9 @@ router.post("/manual", async (req, res) => {
           return res.status(401).json({ error: "No autorizado" });
     }
     try {
-          console.log("[SYNC MANUAL] Iniciado");
-          const resultado = await syncSemanal();
+          const force = req.body?.force === true;
+          console.log(`[SYNC MANUAL] Iniciado (force=${force})`);
+          const resultado = await syncSemanal(force);
           res.json({ ok: true, resultado });
     } catch (err) {
           console.error("[SYNC MANUAL] Error:", err.message);

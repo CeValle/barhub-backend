@@ -33,16 +33,16 @@ const AREA_COLOR={Caja:C.purple,Barra:C.teal,Cocina:C.amber,Mesero:C.blue,Admin:
 
 // ── EMPLEADOS & CONSTANTES ───────────────────────────────────────────────────
 const EMPLEADOS_BASE=[
-  {nombre:"Yulisa", area:"Caja",    salDiario:1000,hrsProg:20,pagoFijo:2000,adminFijo:false},
-  {nombre:"Alexis", area:"Barra",   salDiario:700, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Omar",   area:"Barra",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
-  {nombre:"Angel",  area:"Mesero",  salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Saul",   area:"Mesero",  salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
-  {nombre:"Edith",  area:"Cocina",  salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Jorge",  area:"Cocina",  salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Erick",  area:"Comodín", salDiario:500, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Andrea", area:"Admin",   salDiario:800, hrsProg:46,pagoFijo:4000,adminFijo:true},
-  {nombre:"Gerardo",area:"Admin",   salDiario:1200,hrsProg:46,pagoFijo:6000,adminFijo:true},
+  {nombre:"Yulisa", area:"Caja",    dept:"compartido",salDiario:1000,hrsProg:20,pagoFijo:2000,adminFijo:false},
+  {nombre:"Alexis", area:"Barra",   dept:"cocina",    salDiario:700, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Omar",   area:"Barra",   dept:"cocina",    salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
+  {nombre:"Angel",  area:"Mesero",  dept:"bar",       salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Saul",   area:"Mesero",  dept:"compartido",salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
+  {nombre:"Edith",  area:"Cocina",  dept:"compartido",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Jorge",  area:"Cocina",  dept:"compartido",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Erick",  area:"Comodín", dept:"compartido",salDiario:500, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Andrea", area:"Admin",   dept:"compartido",salDiario:800, hrsProg:46,pagoFijo:4000,adminFijo:true},
+  {nombre:"Gerardo",area:"Admin",   dept:"compartido",salDiario:1200,hrsProg:46,pagoFijo:6000,adminFijo:true},
 ];
 const PISO=[
   {nombre:"Yulisa",area:"Caja",  hrsProg:20},
@@ -141,6 +141,30 @@ function Card({title,children,action}){return(
     {children}
   </div>
 );}
+// Proveedores sugeridos por área (del Excel formato-gastos-ingresos)
+const PROVEEDORES_BAR=["Cerveza Nacional","Cerveza Artesanal","Mixología","Hielo","Bull/Energy","COSTCO (bar)","Seltzers","Otro bar"];
+const PROVEEDORES_COCINA=["Abarrotes","Frutería","Pescadería","COSTCO (cocina)","ISLAS","RVFOODS","SMART","Michoacana","Lucky","Superchivas","La Bodega","Panadería","Gas Pizza","Calimax","Carnitas M.Pueblo","FENER","Agua","Otro cocina"];
+const PROVEEDORES_COMP=["Gas","Mantenimiento","Limpieza","Publicidad","Contabilidad","Otro compartido"];
+
+// Conceptos gastos fijos (del Excel formato-gastos-ingresos)
+const GASTOS_CONCEPTOS=[
+  {concepto:"Renta",                area:"compartido"},
+  {concepto:"Predial",              area:"compartido"},
+  {concepto:"Permiso Alcohol",      area:"bar"},
+  {concepto:"Luz",                  area:"compartido"},
+  {concepto:"Agua",                 area:"compartido"},
+  {concepto:"Gas",                  area:"compartido"},
+  {concepto:"Internet",             area:"compartido"},
+  {concepto:"ECOMNGMT",             area:"bar"},
+  {concepto:"Srv. Alarma",          area:"compartido"},
+  {concepto:"Mantenimiento",        area:"compartido"},
+  {concepto:"Limpieza",             area:"compartido"},
+  {concepto:"Publicidad",           area:"bar"},
+  {concepto:"Contabilidad",         area:"compartido"},
+  {concepto:"Suscripciones",        area:"compartido"},
+  {concepto:"Art. Oficina Bar",     area:"bar"},
+];
+
 function ComingSoon({modulo,subgrupos}){return(
   <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <div style={{background:C.s2,border:"1px dashed "+C.border,borderRadius:12,padding:"32px 24px",textAlign:"center"}}>
@@ -336,9 +360,9 @@ function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab}
         {[
           {label:"Nómina & Propinas",icon:"◉",value:mxnD(nomTotal),  sub:"Total a pagar", color:C.purple,ok:true,          navTo:"nomina"},
           {label:"Ventas",           icon:"◆",value:mxnD(ventasTotal),sub:"Venta semanal", color:C.green, ok:ventasTotal>0, navTo:"ventas"},
-          {label:"Compras",          icon:"🛒",value:"Próx.",          sub:"En desarrollo", color:C.amber, ok:false,         navTo:null},
+          {label:"Compras",          icon:"🛒",value:mxnD((data.compras||[]).reduce((a,c)=>a+(c.monto||0),0)), sub:"Gasto semanal",  color:C.amber, ok:true,  navTo:"compras"},
           {label:"Inventarios",      icon:"📦",value:"Próx.",          sub:"En desarrollo", color:C.orange,ok:false,         navTo:null},
-          {label:"Balance General",  icon:"⚖",value:"Próx.",          sub:"En desarrollo", color:C.blue,  ok:false,         navTo:null},
+          {label:"Balance General",  icon:"⚖",value:"Próx.",          sub:"Ver resultados", color:C.blue,  ok:true,          navTo:"balance"},
           {label:"Costeos",          icon:"🧮",value:"Próx.",          sub:"En desarrollo", color:C.teal,  ok:false,         navTo:null},
           {label:"Tickets",          icon:"🧾",value:"Próx.",          sub:"En desarrollo", color:C.pink,  ok:false,         navTo:null},
           {label:"Facturas",         icon:"📋",value:"Próx.",          sub:"En desarrollo", color:C.red,   ok:false,         navTo:null},
@@ -1054,6 +1078,362 @@ function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose
   );
 }
 
+// ── TAB COMPRAS ───────────────────────────────────────────────────────────────
+function TabCompras({data,semana,loadData}){
+  const compras=data.compras||[];
+  const [area,setArea]=useState("bar");
+  const [proveedor,setProveedor]=useState("");
+  const [descripcion,setDescripcion]=useState("");
+  const [monto,setMonto]=useState("");
+  const [fecha,setFecha]=useState(fmt(new Date()));
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+
+  const sugs=area==="bar"?PROVEEDORES_BAR:area==="cocina"?PROVEEDORES_COCINA:PROVEEDORES_COMP;
+
+  const totalBar=compras.filter(c=>c.area==="bar").reduce((a,c)=>a+(c.monto||0),0);
+  const totalCocina=compras.filter(c=>c.area==="cocina").reduce((a,c)=>a+(c.monto||0),0);
+  const totalComp=compras.filter(c=>c.area==="compartido").reduce((a,c)=>a+(c.monto||0),0);
+  const totalGen=totalBar+totalCocina+totalComp;
+
+  const handleAdd=async()=>{
+    if(!proveedor.trim()||!monto){setError("Proveedor y monto son requeridos");return;}
+    setSaving(true);setError("");
+    try{
+      const r=await fetch(API+"/api/compras",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},
+        body:JSON.stringify({semana:semana.key,fecha,proveedor:proveedor.trim(),descripcion,monto:+monto,area})});
+      const d=await r.json();
+      if(!d.ok)throw new Error(d.error);
+      setProveedor("");setDescripcion("");setMonto("");setFecha(fmt(new Date()));
+      if(loadData)await loadData(semana.key);
+    }catch(e){setError(e.message);}
+    setSaving(false);
+  };
+
+  const handleDel=async(id)=>{
+    if(!confirm("¿Eliminar este gasto?"))return;
+    await fetch(API+"/api/compras/"+id,{method:"DELETE",headers:{"x-app-secret":"BarHub2026"}});
+    if(loadData)await loadData(semana.key);
+  };
+
+  const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal};
+  const areaLabel={bar:"Bar",cocina:"Cocina",compartido:"Compartido"};
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        <KPI label="Total semana"   value={mxn(totalGen)}     color={C.ink}/>
+        <KPI label="Bar"            value={mxn(totalBar)}     color={C.blue}/>
+        <KPI label="Cocina"         value={mxn(totalCocina)}  color={C.amber}/>
+        <KPI label="Compartido"     value={mxn(totalComp)}    color={C.teal}/>
+      </div>
+
+      {/* Formulario */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,padding:16}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.ink3,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>Registrar Compra / Gasto Variable</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
+          <div>
+            <div style={{fontSize:9,color:C.ink3,marginBottom:4}}>ÁREA</div>
+            <select value={area} onChange={e=>{setArea(e.target.value);setProveedor("");}}
+              style={{width:"100%",background:C.s3,border:"1px solid "+C.border,borderRadius:6,padding:"6px 8px",color:C.ink,fontSize:12}}>
+              <option value="bar">Bar</option>
+              <option value="cocina">Cocina</option>
+              <option value="compartido">Compartido</option>
+            </select>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:C.ink3,marginBottom:4}}>PROVEEDOR</div>
+            <input list="provs-list" value={proveedor} onChange={e=>setProveedor(e.target.value)} placeholder="Ej: Cerveza Nacional"
+              style={{width:"100%",background:C.s3,border:"1px solid "+C.border,borderRadius:6,padding:"6px 8px",color:C.ink,fontSize:12}}/>
+            <datalist id="provs-list">{sugs.map((s,i)=><option key={i} value={s}/>)}</datalist>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:C.ink3,marginBottom:4}}>DESCRIPCIÓN (opcional)</div>
+            <input value={descripcion} onChange={e=>setDescripcion(e.target.value)} placeholder="Notas..."
+              style={{width:"100%",background:C.s3,border:"1px solid "+C.border,borderRadius:6,padding:"6px 8px",color:C.ink,fontSize:12}}/>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:C.ink3,marginBottom:4}}>MONTO</div>
+            <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="0.00" min="0"
+              style={{width:"100%",background:C.s3,border:"1px solid "+C.border,borderRadius:6,padding:"6px 8px",color:C.ink,fontSize:12}}/>
+          </div>
+          <button onClick={handleAdd} disabled={saving}
+            style={{background:C.green,color:"#000",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {saving?"...":"＋ Agregar"}
+          </button>
+        </div>
+        {error&&<div style={{color:C.red,fontSize:10,marginTop:8}}>{error}</div>}
+      </div>
+
+      {/* Tabla */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:C.s3}}>
+              {["Fecha","Proveedor","Descripción","Área","Monto",""].map((h,i)=>(
+                <th key={i} style={{padding:"8px 12px",textAlign:i>=4?"right":"left",fontSize:9,color:C.ink3,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {compras.length===0&&(
+              <tr><td colSpan={6} style={{padding:"24px",textAlign:"center",color:C.ink4,fontSize:11}}>Sin compras registradas esta semana</td></tr>
+            )}
+            {[...compras].sort((a,b)=>(a.fecha||"")>(b.fecha||"")?1:-1).map(c=>(
+              <tr key={c.id} style={{borderTop:"1px solid "+C.border}}>
+                <td style={{padding:"8px 12px",fontSize:11,color:C.ink3}}>{c.fecha||"—"}</td>
+                <td style={{padding:"8px 12px",fontSize:12,fontWeight:600,color:C.ink}}>{c.proveedor}</td>
+                <td style={{padding:"8px 12px",fontSize:11,color:C.ink3}}>{c.descripcion||"—"}</td>
+                <td style={{padding:"8px 12px"}}>
+                  <span style={{padding:"2px 8px",borderRadius:10,background:(areaColor[c.area]||C.ink4)+"20",color:areaColor[c.area]||C.ink4,fontSize:9,fontWeight:700}}>
+                    {areaLabel[c.area]||c.area}
+                  </span>
+                </td>
+                <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:C.green,fontSize:12}}>{mxn(c.monto||0)}</td>
+                <td style={{padding:"8px 12px",textAlign:"right"}}>
+                  <button onClick={()=>handleDel(c.id)} style={{background:"transparent",border:"none",color:C.red,cursor:"pointer",fontSize:14,lineHeight:1}}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {compras.length>0&&(
+            <tfoot>
+              <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+                <td colSpan={3} style={{padding:"8px 12px",fontSize:10,color:C.ink3}}>
+                  {["bar","cocina","compartido"].map(a=>{
+                    const t=compras.filter(c=>c.area===a).reduce((s,c)=>s+(c.monto||0),0);
+                    return t>0?<span key={a} style={{marginRight:12,color:areaColor[a]}}>{areaLabel[a]}: {mxn(t)}</span>:null;
+                  })}
+                </td>
+                <td style={{padding:"8px 12px",color:C.ink3,fontSize:10}}>Total</td>
+                <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:C.green,fontSize:13}}>{mxn(totalGen)}</td>
+                <td/>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── TAB BALANCE GENERAL ───────────────────────────────────────────────────────
+function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}){
+  const compras   = data.compras    || [];
+  const gfData    = data.gastosFijos|| [];
+  const gastosMes = data.gastosMes  || {};
+  const nomina    = calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
+
+  // ── Gastos Fijos form state ──────────────────────────────────────────────
+  const [gfEdit,setGfEdit]=useState(null); // {concepto,area,monto}
+  const [gfSaving,setGfSaving]=useState(false);
+
+  const saveGF=async(concepto,area,monto)=>{
+    if(!gastosMes.año||!gastosMes.mes)return;
+    setGfSaving(true);
+    await fetch(API+"/api/gastos",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},
+      body:JSON.stringify({año:gastosMes.año,mes:gastosMes.mes,concepto,area,monto:+monto||0})});
+    setGfSaving(false);setGfEdit(null);
+    if(loadData)await loadData(semana.key);
+  };
+
+  const delGF=async(id)=>{
+    if(!confirm("¿Eliminar este gasto fijo?"))return;
+    await fetch(API+"/api/gastos/"+id,{method:"DELETE",headers:{"x-app-secret":"BarHub2026"}});
+    if(loadData)await loadData(semana.key);
+  };
+
+  // ── Ventas split ──────────────────────────────────────────────────────────
+  const topGrupos=grupos.filter(g=>!g.es_subgrupo);
+  const ventasBar   =topGrupos.filter(g=>g.grupo!=="Alimentos").reduce((a,g)=>a+(g.venta||0),0);
+  const ventasCocina=topGrupos.filter(g=>g.grupo==="Alimentos").reduce((a,g)=>a+(g.venta||0),0);
+  const ventasTot   =ventasBar+ventasCocina;
+  const barPct  =ventasTot>0?ventasBar/ventasTot:0.7;
+  const cocPct  =1-barPct;
+
+  // ── Nómina split ──────────────────────────────────────────────────────────
+  const nomBar  =nomina.filter(e=>e.dept==="bar")       .reduce((a,e)=>a+e.total,0);
+  const nomCoc  =nomina.filter(e=>e.dept==="cocina")    .reduce((a,e)=>a+e.total,0);
+  const nomComp =nomina.filter(e=>e.dept==="compartido").reduce((a,e)=>a+e.total,0);
+  const nomBarT =nomBar +nomComp*barPct;
+  const nomCocT =nomCoc +nomComp*cocPct;
+  const nomTot  =nomBarT+nomCocT;
+
+  // ── Compras split ─────────────────────────────────────────────────────────
+  const cpBar  =compras.filter(c=>c.area==="bar")       .reduce((a,c)=>a+(c.monto||0),0);
+  const cpCoc  =compras.filter(c=>c.area==="cocina")    .reduce((a,c)=>a+(c.monto||0),0);
+  const cpComp =compras.filter(c=>c.area==="compartido").reduce((a,c)=>a+(c.monto||0),0);
+  const cpBarT =cpBar +cpComp*barPct;
+  const cpCocT =cpCoc +cpComp*cocPct;
+  const cpTot  =cpBarT+cpCocT;
+
+  // ── Gastos Fijos split (÷4.33 semanas/mes) ────────────────────────────────
+  const gfBar  =gfData.filter(g=>g.area==="bar")       .reduce((a,g)=>a+(g.monto||0),0);
+  const gfCoc  =gfData.filter(g=>g.area==="cocina")    .reduce((a,g)=>a+(g.monto||0),0);
+  const gfComp =gfData.filter(g=>g.area==="compartido").reduce((a,g)=>a+(g.monto||0),0);
+  const gfBarT =(gfBar +gfComp*barPct)/4.33;
+  const gfCocT =(gfCoc +gfComp*cocPct)/4.33;
+  const gfTot  =gfBarT+gfCocT;
+
+  // ── Utilidades ───────────────────────────────────────────────────────────
+  const utilBar=ventasBar-nomBarT-cpBarT-gfBarT;
+  const utilCoc=ventasCocina-nomCocT-cpCocT-gfCocT;
+  const utilTot=ventasTot-nomTot-cpTot-gfTot;
+  const margen =ventasTot>0?utilTot/ventasTot*100:0;
+
+  const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal};
+  const areaLabel={bar:"Bar",cocina:"Cocina",compartido:"Compartido"};
+
+  const Row=({label,bar,coc,tot,isNeg,bold,color})=>(
+    <tr style={{borderTop:"1px solid "+C.border}}>
+      <td style={{padding:"7px 12px",fontSize:11,color:bold?C.ink:C.ink3,fontWeight:bold?700:400}}>{label}</td>
+      {[bar,coc,tot].map((v,i)=>{
+        const neg=isNeg||v<0; const col=color||(neg?C.red:(v>0?C.green:C.ink3));
+        return <td key={i} style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:bold?700:500,fontSize:11,color:col}}>
+          {isNeg&&v>0?"("+mxn(v)+")":mxn(Math.abs(v))}
+        </td>;
+      })}
+    </tr>
+  );
+
+  const mesNombre=gastosMes.mes?MESES[(gastosMes.mes||1)-1]+" "+gastosMes.año:"";
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* KPI resumen */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        <KPI label="Ventas totales"  value={mxn(ventasTot)}  color={C.green}/>
+        <KPI label="Egresos totales" value={"("+mxn(nomTot+cpTot+gfTot)+")"}  color={C.red}/>
+        <KPI label="Utilidad bruta"  value={mxn(utilTot)}    color={utilTot>=0?C.green:C.red}/>
+        <KPI label="Margen"          value={pct(margen)}     color={margen>=0?C.teal:C.red}/>
+      </div>
+
+      {/* Estado de resultados */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+        <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Estado de Resultados</span>
+          <div style={{display:"flex",gap:16}}>
+            {[{l:"Bar",c:C.blue},{l:"Cocina",c:C.amber},{l:"Total",c:C.green}].map(({l,c})=>(
+              <span key={l} style={{fontSize:9,fontWeight:700,color:c,textTransform:"uppercase"}}>{l}</span>
+            ))}
+          </div>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:C.s3}}>
+              <th style={{padding:"6px 12px",textAlign:"left",fontSize:9,color:C.ink4,fontWeight:600,width:"40%"}}>CONCEPTO</th>
+              {["BAR","COCINA","TOTAL"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"right",fontSize:9,color:C.ink4,fontWeight:600}}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <Row label="Ventas"          bar={ventasBar}  coc={ventasCocina} tot={ventasTot}  bold/>
+            <Row label="(−) Nómina"      bar={nomBarT}    coc={nomCocT}      tot={nomTot}     isNeg/>
+            <Row label="(−) Compras"     bar={cpBarT}     coc={cpCocT}       tot={cpTot}      isNeg/>
+            <Row label="(−) Gastos Fijos"bar={gfBarT}     coc={gfCocT}       tot={gfTot}      isNeg/>
+            <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+              <td style={{padding:"9px 12px",fontSize:12,fontWeight:800,color:C.ink}}>Utilidad</td>
+              {[utilBar,utilCoc,utilTot].map((v,i)=>(
+                <td key={i} style={{padding:"9px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:800,fontSize:12,color:v>=0?C.green:C.red}}>{mxn(v)}</td>
+              ))}
+            </tr>
+            <tr style={{background:C.s3}}>
+              <td style={{padding:"4px 12px 9px",fontSize:10,color:C.ink4}}>Margen</td>
+              {[ventasBar>0?utilBar/ventasBar*100:0, ventasCocina>0?utilCoc/ventasCocina*100:0, margen].map((v,i)=>(
+                <td key={i} style={{padding:"4px 12px 9px",textAlign:"right",fontSize:10,color:v>=0?C.teal:C.red}}>{pct(v)}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Gastos Fijos mensuales */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+        <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Gastos Fijos — {mesNombre}</span>
+          <span style={{fontSize:9,color:C.ink4}}>Se prorratea ÷ 4.33 semanas por semana del balance</span>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:C.s3}}>
+              {["Concepto","Área","Monto mensual","Semanal (÷4.33)",""].map((h,i)=>(
+                <th key={i} style={{padding:"6px 12px",textAlign:i>=2&&i<4?"right":"left",fontSize:9,color:C.ink4,fontWeight:600,textTransform:"uppercase"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {GASTOS_CONCEPTOS.map(({concepto,area:defArea})=>{
+              const rec=gfData.find(g=>g.concepto===concepto);
+              const monto=rec?.monto||0;
+              const ar=rec?.area||defArea;
+              const isEditing=gfEdit?.concepto===concepto;
+              return(
+                <tr key={concepto} style={{borderTop:"1px solid "+C.border}}>
+                  <td style={{padding:"7px 12px",fontSize:11,color:C.ink}}>{concepto}</td>
+                  <td style={{padding:"7px 12px"}}>
+                    {isEditing?(
+                      <select value={gfEdit.area} onChange={e=>setGfEdit({...gfEdit,area:e.target.value})}
+                        style={{background:C.s3,border:"1px solid "+C.border,borderRadius:4,padding:"3px 6px",color:C.ink,fontSize:10}}>
+                        <option value="bar">Bar</option>
+                        <option value="cocina">Cocina</option>
+                        <option value="compartido">Compartido</option>
+                      </select>
+                    ):(
+                      <span style={{padding:"2px 8px",borderRadius:10,background:(areaColor[ar]||C.ink4)+"20",color:areaColor[ar]||C.ink4,fontSize:9,fontWeight:700}}>
+                        {areaLabel[ar]||ar}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{padding:"7px 12px",textAlign:"right"}}>
+                    {isEditing?(
+                      <input type="number" value={gfEdit.monto} onChange={e=>setGfEdit({...gfEdit,monto:e.target.value})} min="0"
+                        style={{width:90,background:C.s3,border:"1px solid "+C.blue,borderRadius:4,padding:"3px 6px",color:C.ink,fontSize:11,textAlign:"right"}}/>
+                    ):(
+                      <span style={{fontFamily:"monospace",fontSize:11,color:monto>0?C.ink:C.ink4}}>{monto>0?mxn(monto):"—"}</span>
+                    )}
+                  </td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontSize:10,color:C.ink4}}>
+                    {monto>0?mxn(monto/4.33):"—"}
+                  </td>
+                  <td style={{padding:"7px 12px",textAlign:"right",display:"flex",gap:6,justifyContent:"flex-end"}}>
+                    {isEditing?(
+                      <>
+                        <button onClick={()=>saveGF(concepto,gfEdit.area,gfEdit.monto)} disabled={gfSaving}
+                          style={{background:C.green,color:"#000",border:"none",borderRadius:4,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
+                        <button onClick={()=>setGfEdit(null)}
+                          style={{background:C.s4,color:C.ink3,border:"none",borderRadius:4,padding:"3px 8px",fontSize:10,cursor:"pointer"}}>✕</button>
+                      </>
+                    ):(
+                      <>
+                        <button onClick={()=>setGfEdit({concepto,area:ar,monto:monto||""})}
+                          style={{background:C.s4,color:C.ink3,border:"none",borderRadius:4,padding:"3px 8px",fontSize:10,cursor:"pointer"}}>✎</button>
+                        {rec&&<button onClick={()=>delGF(rec.id)} style={{background:"transparent",border:"none",color:C.red,cursor:"pointer",fontSize:12}}>✕</button>}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+              <td style={{padding:"8px 12px",fontWeight:700,fontSize:11,color:C.ink}}>Total mensual</td>
+              <td/>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:12,color:C.ink}}>
+                {mxn(gfData.reduce((a,g)=>a+(g.monto||0),0))}
+              </td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:C.ink3}}>
+                {mxn(gfData.reduce((a,g)=>a+(g.monto||0),0)/4.33)}
+              </td>
+              <td/>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── APP ──────────────────────────────────────────────────────────────────────
 function App(){
   const [tab,setTab]         =useState("dashboard");
@@ -1088,7 +1468,7 @@ function App(){
       const d=await r.json();
       if(d.ok){
         const n=arr=>(arr||[]).map(m=>({...m,prop_tarjeta:+(m.prop_tarjeta??m.propTarjeta??m.propina??0)||0}));
-        setData({ventas:n(d.ventasMesero),asistencias:d.asistencias||[],semana:d.semana,semanaAsist:d.semanaAsist||d.semana,semanaVentas:d.semanaVentasActual||d.semana});
+        setData({ventas:n(d.ventasMesero),asistencias:d.asistencias||[],semana:d.semana,semanaAsist:d.semanaAsist||d.semana,semanaVentas:d.semanaVentasActual||d.semana,compras:d.compras||[],gastosFijos:d.gastosFijos||[],gastosMes:d.gastosMes||null});
         setVentasProp(n(d.ventasMeseroPropinas||[]));
         if(d.semanaVentasPropinas)setSemPropKey(d.semanaVentasPropinas);
         setGrupos(d.ventasGrupo||[]);
@@ -1132,16 +1512,16 @@ function App(){
   const stCol={idle:C.ink4,checking:C.amber,online:C.green,offline:C.red,sync:C.blue}[status]||C.ink4;
 
   const renderContent=()=>{
-    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,setTab};
+    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,setTab,loadData};
     switch(tab){
       case "dashboard":   return <TabDashboard {...props}/>;
       case "nomina":      return <TabNomina {...props}/>;
       case "propinas":    return <TabPropinas {...props}/>;
       case "asistencias": return <TabAsistencias {...props}/>;
       case "ventas":      return <TabVentas {...props}/>;
-      case "compras":     return <ComingSoon modulo="Compras" subgrupos={["Órdenes de compra","Por proveedor","Por categoría","CrossCheck tickets"]}/>;
+      case "compras":     return <TabCompras  data={data} semana={semana} loadData={loadData}/>;
       case "inventarios": return <ComingSoon modulo="Inventarios" subgrupos={["Stock actual","Entradas/Salidas","Alertas","Valuación"]}/>;
-      case "balance":     return <ComingSoon modulo="Balance General" subgrupos={["Ingresos vs Egresos","Estado de resultados","Margen","Comparativo mensual"]}/>;
+      case "balance":     return <TabBalance  data={data} semana={semana} grupos={grupos} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} loadData={loadData}/>;
       case "costeos":     return <ComingSoon modulo="Costeos" subgrupos={["Costos cocina","Costos bar","% Costo/Venta","Recetas"]}/>;
       case "tickets":     return <ComingSoon modulo="Tickets" subgrupos={["Subir foto ticket","Análisis Claude","Cruce con facturas","Resumen semanal"]}/>;
       case "facturas":    return <ComingSoon modulo="Facturas" subgrupos={["Gmail CFDI","Por proveedor","Pendientes de pago","CrossCheck órdenes"]}/>;
