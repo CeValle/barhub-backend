@@ -1218,12 +1218,288 @@ function TabCompras({data,semana,loadData}){
   );
 }
 
+// ── BALANCE HELPERS ───────────────────────────────────────────────────────────
+// Calcula métricas de una semana sin overrides (para vista mensual)
+function calcBalanceSemana(s){
+  const nom=calcNomina(s.asistencias||[],s.ventasMesero||[],{},{},[]);
+  const topG=(s.ventasGrupo||[]).filter(g=>!g.es_subgrupo);
+  const hasG=topG.length>0;
+  const vBar=hasG?topG.filter(g=>g.grupo!=="Alimentos").reduce((a,g)=>a+(g.venta||0),0):0;
+  const vCoc=hasG?topG.filter(g=>g.grupo==="Alimentos").reduce((a,g)=>a+(g.venta||0),0):0;
+  const vFb =!hasG?(s.ventasMesero||[]).reduce((a,m)=>a+(m.venta||0),0):0;
+  const vTot=hasG?vBar+vCoc:vFb;
+  const nomBar  =nom.filter(e=>e.dept==="bar")  .reduce((a,e)=>a+e.total,0);
+  const nomCoc  =nom.filter(e=>e.dept==="cocina").reduce((a,e)=>a+e.total,0);
+  const nomAdmin=nom.filter(e=>e.dept==="admin") .reduce((a,e)=>a+e.total,0);
+  const nomTot  =nomBar+nomCoc+nomAdmin;
+  const cp=s.compras||[];
+  const cpB=cp.filter(c=>c.area==="bar").reduce((a,c)=>a+(c.monto||0),0);
+  const cpC=cp.filter(c=>c.area==="cocina").reduce((a,c)=>a+(c.monto||0),0);
+  const cpX=cp.filter(c=>c.area==="compartido").reduce((a,c)=>a+(c.monto||0),0);
+  const bPct=vTot>0&&hasG?vBar/vTot:0.7;
+  const cpBT=cpB+cpX*bPct;
+  const cpCT=cpC+cpX*(1-bPct);
+  return{hasG,vBar,vCoc,vFb,vTot,nomBar,nomCoc,nomAdmin,nomTot,cpBT,cpCT,cpTot:cpBT+cpCT,bPct};
+}
+
+// Renderiza la vista mensual (con detalle por semana)
+function BalanceMensualView({mesData,mesLoading,gfEdit,setGfEdit,gfSaving,saveGF,delGF,gastosMes}){
+  if(mesLoading) return <div style={{padding:40,textAlign:"center",color:C.ink4}}>Cargando datos del mes…</div>;
+  if(!mesData)   return <div style={{padding:40,textAlign:"center",color:C.ink4}}>Sin datos mensuales.</div>;
+
+  const gfData=mesData.gastosFijos||[];
+  const semanas=mesData.semanas||[];
+
+  // Calcular métricas por semana
+  const semCalc=semanas.map(s=>({...s,...calcBalanceSemana(s)}));
+
+  // Totales mensuales
+  const mVBar =semCalc.reduce((a,s)=>a+s.vBar,0);
+  const mVCoc =semCalc.reduce((a,s)=>a+s.vCoc,0);
+  const mVFb  =semCalc.reduce((a,s)=>a+s.vFb,0);
+  const hasAnyG=semCalc.some(s=>s.hasG);
+  const mVTot =hasAnyG?mVBar+mVCoc:mVFb;
+  const mNomBar  =semCalc.reduce((a,s)=>a+s.nomBar,0);
+  const mNomCoc  =semCalc.reduce((a,s)=>a+s.nomCoc,0);
+  const mNomAdmin=semCalc.reduce((a,s)=>a+s.nomAdmin,0);
+  const mNomTot  =mNomBar+mNomCoc+mNomAdmin;
+  const mCpBT=semCalc.reduce((a,s)=>a+s.cpBT,0);
+  const mCpCT=semCalc.reduce((a,s)=>a+s.cpCT,0);
+  const mCpTot=mCpBT+mCpCT;
+
+  // Gastos fijos: monto TOTAL mensual (sin prorratear)
+  const mBarPct=mVTot>0&&hasAnyG?mVBar/mVTot:0.7;
+  const gfBarM =(gfData.filter(g=>g.area==="bar").reduce((a,g)=>a+(g.monto||0),0) + gfData.filter(g=>g.area==="compartido").reduce((a,g)=>a+(g.monto||0),0)*mBarPct);
+  const gfCocM =(gfData.filter(g=>g.area==="cocina").reduce((a,g)=>a+(g.monto||0),0) + gfData.filter(g=>g.area==="compartido").reduce((a,g)=>a+(g.monto||0),0)*(1-mBarPct));
+  const gfTotM =gfBarM+gfCocM;
+
+  const uBar=mVBar-(mNomBar+mNomAdmin)-mCpBT-gfBarM;
+  const uCoc=mVCoc-mNomCoc-mCpCT-gfCocM;
+  const uTot=mVTot-mNomTot-mCpTot-gfTotM;
+  const margen=mVTot>0?uTot/mVTot*100:0;
+
+  const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal,admin:C.purple};
+  const areaLabel={bar:"Bar",cocina:"Cocina",compartido:"Compartido",admin:"Admin"};
+  const mesNombre=gastosMes.mes?MESES[(gastosMes.mes||1)-1]+" "+gastosMes.año:"";
+
+  const Row=({label,bar,coc,tot,isNeg,bold,sub})=>(
+    <tr style={{borderTop:"1px solid "+C.border}}>
+      <td style={{padding:"7px 12px",fontSize:11,color:bold?C.ink:C.ink3,fontWeight:bold?700:400}}>
+        {label}{sub&&<span style={{fontSize:9,color:C.ink4,marginLeft:6}}>{sub}</span>}
+      </td>
+      {[bar,coc,tot].map((v,i)=>{
+        const col=isNeg?C.red:(v>0?C.green:v<0?C.red:C.ink4);
+        return <td key={i} style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:bold?700:500,fontSize:11,color:col}}>
+          {isNeg&&v>0?"("+mxn(v)+")":mxn(Math.abs(v))}
+        </td>;
+      })}
+    </tr>
+  );
+
+  // Etiqueta corta de semana "May 6–10"
+  const semLabel=key=>{
+    const [ini,fin]=key.split("_a_");
+    const d1=new Date(ini+"T12:00:00"),d2=new Date(fin+"T12:00:00");
+    return d1.getDate()+" "+MESES[d1.getMonth()].slice(0,3)+" – "+d2.getDate();
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* KPIs mensuales */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        <KPI label={"Ventas "+mesNombre}  value={mxn(mVTot)}                   color={C.green}/>
+        <KPI label="Egresos totales"       value={"("+mxn(mNomTot+mCpTot+gfTotM)+")"} color={C.red}/>
+        <KPI label="Utilidad mensual"      value={mxn(uTot)}                    color={uTot>=0?C.green:C.red}/>
+        <KPI label="Margen"                value={pct(margen)}                   color={margen>=0?C.teal:C.red}/>
+      </div>
+
+      {/* P&L mensual */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+        <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>P&L {mesNombre}</span>
+          <div style={{display:"flex",gap:16}}>
+            {[{l:"Bar",c:C.blue},{l:"Restaurante",c:C.amber},{l:"Total",c:C.green}].map(({l,c})=>(
+              <span key={l} style={{fontSize:9,fontWeight:700,color:c,textTransform:"uppercase"}}>{l}</span>
+            ))}
+          </div>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.s3}}>
+            <th style={{padding:"6px 12px",textAlign:"left",fontSize:9,color:C.ink4,fontWeight:600,width:"42%"}}>CONCEPTO</th>
+            {["BAR","RESTAURANTE","TOTAL"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"right",fontSize:9,color:C.ink4,fontWeight:600}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            <Row label="Ventas"            bar={hasAnyG?mVBar:mVFb} coc={hasAnyG?mVCoc:0} tot={mVTot} bold/>
+            <Row label="(−) Nómina Bar"    bar={mNomBar}     coc={0}        tot={mNomBar}         isNeg sub="Mesero/Barra/Caja/Comodín"/>
+            <Row label="(−) Nómina Admin"  bar={mNomAdmin}   coc={0}        tot={mNomAdmin}        isNeg sub="Andrea/Gerardo"/>
+            <Row label="(−) Nómina Cocina" bar={0}           coc={mNomCoc}  tot={mNomCoc}          isNeg sub="Personal cocina"/>
+            <Row label="(−) Compras"       bar={mCpBT}       coc={mCpCT}    tot={mCpTot}           isNeg/>
+            <Row label="(−) Gastos Fijos"  bar={gfBarM}      coc={gfCocM}   tot={gfTotM}           isNeg sub="total mes"/>
+            <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+              <td style={{padding:"9px 12px",fontSize:12,fontWeight:800,color:C.ink}}>Utilidad</td>
+              {[uBar,uCoc,uTot].map((v,i)=>(
+                <td key={i} style={{padding:"9px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:800,fontSize:12,color:v>=0?C.green:C.red}}>{mxn(v)}</td>
+              ))}
+            </tr>
+            <tr style={{background:C.s3}}>
+              <td style={{padding:"4px 12px 9px",fontSize:10,color:C.ink4}}>Margen</td>
+              {[mVBar>0?uBar/mVBar*100:0, mVCoc>0?uCoc/mVCoc*100:0, margen].map((v,i)=>(
+                <td key={i} style={{padding:"4px 12px 9px",textAlign:"right",fontSize:10,color:v>=0?C.teal:C.red}}>{pct(v)}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Desglose por semana */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+        <div style={{padding:"10px 16px",background:C.s3,borderBottom:"1px solid "+C.border}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Detalle por semana</span>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.s3}}>
+            {["Semana","Ventas Bar","Ventas Rest.","Nómina","Compras","G.Fijos sem","Utilidad","Margen"].map((h,i)=>(
+              <th key={i} style={{padding:"6px 12px",textAlign:i===0?"left":"right",fontSize:9,color:C.ink4,fontWeight:600,textTransform:"uppercase"}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {semCalc.map(s=>{
+              const gfSem=(gfTotM/semanas.length)||0;
+              const nomS=s.nomBar+s.nomCoc+s.nomAdmin;
+              const util=s.vTot-nomS-s.cpTot-gfSem;
+              const mg=s.vTot>0?util/s.vTot*100:0;
+              return(
+                <tr key={s.ventasKey} style={{borderTop:"1px solid "+C.border}}>
+                  <td style={{padding:"7px 12px",fontSize:11,color:C.ink}}>{semLabel(s.ventasKey)}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontSize:10,color:C.blue}}>{s.hasG?mxn(s.vBar):"—"}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontSize:10,color:C.amber}}>{s.hasG?mxn(s.vCoc):"—"}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontSize:10,color:C.red}}>{nomS>0?"("+mxn(nomS)+")":"—"}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontSize:10,color:C.red}}>{s.cpTot>0?"("+mxn(s.cpTot)+")":"—"}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontSize:10,color:C.red}}>{gfSem>0?"("+mxn(gfSem)+")":"—"}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:util>=0?C.green:C.red}}>{mxn(util)}</td>
+                  <td style={{padding:"7px 12px",textAlign:"right",fontSize:10,color:mg>=0?C.teal:C.red}}>{pct(mg)}</td>
+                </tr>
+              );
+            })}
+            {semCalc.length===0&&<tr><td colSpan={8} style={{padding:24,textAlign:"center",color:C.ink4,fontSize:11}}>Sin semanas registradas para este mes</td></tr>}
+          </tbody>
+          <tfoot>
+            <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+              <td style={{padding:"8px 12px",fontWeight:700,fontSize:11,color:C.ink}}>Total mes</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:C.blue}}>{hasAnyG?mxn(mVBar):"—"}</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:C.amber}}>{hasAnyG?mxn(mVCoc):"—"}</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:C.red}}>{mNomTot>0?"("+mxn(mNomTot)+")":"—"}</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:C.red}}>{mCpTot>0?"("+mxn(mCpTot)+")":"—"}</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:11,color:C.red}}>{gfTotM>0?"("+mxn(gfTotM)+")":"—"}</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:800,fontSize:12,color:uTot>=0?C.green:C.red}}>{mxn(uTot)}</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontSize:10,color:margen>=0?C.teal:C.red}}>{pct(margen)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Gastos Fijos (misma tabla que semanal) */}
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+        <div style={{padding:"10px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Gastos Fijos — {mesNombre}</span>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.s3}}>
+            {["Concepto","Área","Monto mensual",""].map((h,i)=>(
+              <th key={i} style={{padding:"6px 12px",textAlign:i===2?"right":"left",fontSize:9,color:C.ink4,fontWeight:600,textTransform:"uppercase"}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {GASTOS_CONCEPTOS.map(({concepto,area:defArea})=>{
+              const rec=gfData.find(g=>g.concepto===concepto);
+              const monto=rec?.monto||0;
+              const ar=rec?.area||defArea;
+              const isEditing=gfEdit?.concepto===concepto;
+              return(
+                <tr key={concepto} style={{borderTop:"1px solid "+C.border}}>
+                  <td style={{padding:"7px 12px",fontSize:11,color:C.ink}}>{concepto}</td>
+                  <td style={{padding:"7px 12px"}}>
+                    {isEditing?(
+                      <select value={gfEdit.area} onChange={e=>setGfEdit({...gfEdit,area:e.target.value})}
+                        style={{background:C.s3,border:"1px solid "+C.border,borderRadius:4,padding:"3px 6px",color:C.ink,fontSize:10}}>
+                        <option value="bar">Bar</option><option value="cocina">Cocina</option><option value="compartido">Compartido</option>
+                      </select>
+                    ):(
+                      <span style={{padding:"2px 8px",borderRadius:10,background:(areaColor[ar]||C.ink4)+"20",color:areaColor[ar]||C.ink4,fontSize:9,fontWeight:700}}>
+                        {areaLabel[ar]||ar}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{padding:"7px 12px",textAlign:"right"}}>
+                    {isEditing?(
+                      <input type="number" value={gfEdit.monto} onChange={e=>setGfEdit({...gfEdit,monto:e.target.value})} min="0"
+                        style={{width:90,background:C.s3,border:"1px solid "+C.blue,borderRadius:4,padding:"3px 6px",color:C.ink,fontSize:11,textAlign:"right"}}/>
+                    ):(
+                      <span style={{fontFamily:"monospace",fontSize:11,color:monto>0?C.ink:C.ink4}}>{monto>0?mxn(monto):"—"}</span>
+                    )}
+                  </td>
+                  <td style={{padding:"7px 12px",textAlign:"right",display:"flex",gap:6,justifyContent:"flex-end"}}>
+                    {isEditing?(
+                      <>
+                        <button onClick={()=>saveGF(concepto,gfEdit.area,gfEdit.monto)} disabled={gfSaving}
+                          style={{background:C.green,color:"#000",border:"none",borderRadius:4,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
+                        <button onClick={()=>setGfEdit(null)}
+                          style={{background:C.s4,color:C.ink3,border:"none",borderRadius:4,padding:"3px 8px",fontSize:10,cursor:"pointer"}}>✕</button>
+                      </>
+                    ):(
+                      <>
+                        <button onClick={()=>setGfEdit({concepto,area:ar,monto:monto||""})}
+                          style={{background:C.s4,color:C.ink3,border:"none",borderRadius:4,padding:"3px 8px",fontSize:10,cursor:"pointer"}}>✎</button>
+                        {rec&&<button onClick={()=>delGF(rec.id)} style={{background:"transparent",border:"none",color:C.red,cursor:"pointer",fontSize:12}}>✕</button>}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+              <td style={{padding:"8px 12px",fontWeight:700,fontSize:11,color:C.ink}}>Total mensual</td>
+              <td/>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,fontSize:12,color:C.ink}}>
+                {mxn(gfData.reduce((a,g)=>a+(g.monto||0),0))}
+              </td>
+              <td/>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── TAB BALANCE GENERAL ───────────────────────────────────────────────────────
 function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}){
   const compras   = data.compras    || [];
   const gfData    = data.gastosFijos|| [];
   const gastosMes = data.gastosMes  || {};
   const nomina    = calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
+
+  // ── Vista toggle: semanal / mensual ──────────────────────────────────────
+  const [vista,setVista]=useState("semanal");
+  const [mesData,setMesData]=useState(null);
+  const [mesLoading,setMesLoading]=useState(false);
+
+  const loadMes=useCallback(async()=>{
+    if(!gastosMes?.año||!gastosMes?.mes)return;
+    setMesLoading(true);
+    try{
+      const r=await fetch(API+"/api/dashboard/balance-mensual?año="+gastosMes.año+"&mes="+gastosMes.mes);
+      const d=await r.json();
+      if(d.ok)setMesData(d);
+    }catch(e){console.error("[balance-mensual]",e);}
+    setMesLoading(false);
+  },[gastosMes?.año,gastosMes?.mes]);
+
+  useEffect(()=>{
+    if(vista==="mensual")loadMes();
+  },[vista,loadMes]);
 
   // ── Gastos Fijos form state ──────────────────────────────────────────────
   const [gfEdit,setGfEdit]=useState(null);
@@ -1306,8 +1582,31 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
     </tr>
   );
 
+  const MESES_NOMBRES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const mesLabel=gastosMes?.mes?MESES_NOMBRES[gastosMes.mes-1]+" "+gastosMes.año:"Mes";
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* Toggle semanal / mensual */}
+      <div style={{display:"flex",gap:0,background:C.s3,borderRadius:8,padding:3,border:"1px solid "+C.border,alignSelf:"flex-start"}}>
+        {[{id:"semanal",label:"Esta semana"},{id:"mensual",label:mesLabel}].map(({id,label})=>(
+          <button key={id} onClick={()=>setVista(id)}
+            style={{background:vista===id?C.blue:"transparent",color:vista===id?"#000":C.ink3,border:"none",borderRadius:6,padding:"6px 18px",fontSize:11,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Vista mensual */}
+      {vista==="mensual"&&(
+        <BalanceMensualView mesData={mesData} mesLoading={mesLoading}
+          gfEdit={gfEdit} setGfEdit={setGfEdit} gfSaving={gfSaving} saveGF={saveGF} delGF={delGF}
+          gastosMes={gastosMes}/>
+      )}
+
+      {/* Vista semanal */}
+      {vista==="semanal"&&<>
+
       {/* Aviso sin datos de ventas por grupo */}
       {!hasGrupos&&ventasFallback===0&&(
         <div style={{background:C.s2,border:"1px dashed "+C.amber,borderRadius:8,padding:"10px 14px",fontSize:11,color:C.amber}}>
@@ -1461,6 +1760,7 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
           </tfoot>
         </table>
       </div>
+      </>}
     </div>
   );
 }

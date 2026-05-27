@@ -165,6 +165,64 @@ router.get("/asistencias-anio", async (req, res) => {
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// Calcula todos los bloques MIÉ-DOM cuyo miércoles cae en el mes dado
+// Devuelve [{ventasKey, selectorKey}]
+function semanasEnMes(año, mes) {
+  const result = [];
+  const lastDay = new Date(año, mes, 0, 12, 0, 0); // último día del mes
+  // Primer miércoles del mes
+  let d = new Date(año, mes - 1, 1, 12, 0, 0);
+  while (d.getDay() !== 3) d.setDate(d.getDate() + 1);
+  while (d <= lastDay) {
+    const mier = new Date(d);
+    const sun  = new Date(d); sun.setDate(d.getDate() + 4);
+    const dom  = new Date(d); dom.setDate(d.getDate() - 3);
+    const sab  = new Date(dom); sab.setDate(dom.getDate() + 6);
+    result.push({
+      ventasKey:   `${FMT(mier)}_a_${FMT(sun)}`,
+      selectorKey: `${FMT(dom)}_a_${FMT(sab)}`,
+    });
+    d.setDate(d.getDate() + 7);
+  }
+  return result;
+}
+
+// GET /api/dashboard/balance-mensual?año=2026&mes=5
+router.get("/balance-mensual", async (req, res) => {
+  try {
+    const año = +req.query.año || new Date().getFullYear();
+    const mes  = +req.query.mes  || (new Date().getMonth() + 1);
+
+    const semanas    = semanasEnMes(año, mes);
+    const ventasKeys   = semanas.map(s => s.ventasKey);
+    const selectorKeys = semanas.map(s => s.selectorKey);
+
+    const [vmRes, vgRes, asistRes, nomRes, cpRes, gfRes] = await Promise.all([
+      supabase.from("ventas_mesero").select("*").in("semana", ventasKeys),
+      supabase.from("ventas_grupo") .select("*").in("semana", ventasKeys),
+      supabase.from("asistencias")  .select("*").in("semana", selectorKeys),
+      supabase.from("nomina_semanal").select("*").in("semana", selectorKeys),
+      supabase.from("compras")      .select("*").in("semana", selectorKeys),
+      supabase.from("gastos_fijos") .select("*").eq("año", año).eq("mes", mes).order("concepto"),
+    ]);
+
+    const semanasData = semanas.map(({ ventasKey, selectorKey }) => ({
+      ventasKey,
+      selectorKey,
+      ventasMesero: (vmRes.data  || []).filter(r => r.semana === ventasKey),
+      ventasGrupo:  (vgRes.data  || []).filter(r => r.semana === ventasKey),
+      asistencias:  (asistRes.data || []).filter(r => r.semana === selectorKey),
+      nomina:       (nomRes.data || []).filter(r => r.semana === selectorKey),
+      compras:      (cpRes.data  || []).filter(r => r.semana === selectorKey),
+    }));
+
+    res.json({ ok: true, semanas: semanasData, gastosFijos: gfRes.data || [], año, mes });
+  } catch(e) {
+    console.error("[BALANCE-MES] Error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 router.get("/historico", async (req, res) => {
   try {
     const { data } = await supabase.from("resumen_semanal")
