@@ -101,7 +101,8 @@ router.get("/semana-actual", async (req, res) => {
     const grupos = vgRes.data || [];
     const totalVentas = grupos
       .filter(g => !g.es_subgrupo)
-      .reduce((a, g) => a + (Number(g.venta)||0), 0);
+      .reduce((a, g) => a + (Number(g.venta)||0), 0)
+      || (vmAct.data||[]).reduce((a, m) => a + (Number(m.venta)||0), 0);
 
     res.json({
       ok: true,
