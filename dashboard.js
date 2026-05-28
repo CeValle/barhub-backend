@@ -4,6 +4,30 @@ const { supabase } = require("./supabase");
 const PAD = n => String(n).padStart(2,"0");
 const FMT = d => `${d.getFullYear()}-${PAD(d.getMonth()+1)}-${PAD(d.getDate())}`;
 
+// ── Caché en memoria — lista de semanas disponibles (TTL 5 min) ───────────────
+const _semsCache = { data: null, ts: 0 };
+const SEMS_TTL   = 5 * 60 * 1000;
+
+async function getSemsDisponibles(invalidar = false) {
+  const ahora = Date.now();
+  if (!invalidar && _semsCache.data && (ahora - _semsCache.ts) < SEMS_TTL) {
+    return _semsCache.data;
+  }
+  const [ra, rm, rg] = await Promise.all([
+    supabase.from("asistencias")  .select("semana").order("semana", { ascending: true }),
+    supabase.from("ventas_mesero").select("semana").order("semana", { ascending: true }),
+    supabase.from("ventas_grupo") .select("semana").order("semana", { ascending: true }),
+  ]);
+  const result = {
+    semsA: [...new Set((ra.data||[]).map(r => r.semana))],
+    semsM: [...new Set((rm.data||[]).map(r => r.semana))],
+    semsG: [...new Set((rg.data||[]).map(r => r.semana))],
+  };
+  _semsCache.data = result;
+  _semsCache.ts   = ahora;
+  return result;
+}
+
 // Semana DOM-SAB actual
 function calcularSemanaActual() {
   const hoy = new Date(), dow = hoy.getDay(), d = dow === 0 ? 7 : dow;
@@ -42,16 +66,8 @@ router.get("/semana-actual", async (req, res) => {
     const semanaParam = req.query.semana;
     const semana = semanaParam || calcularSemanaActual();
 
-    // Semanas disponibles en Supabase
-    const [ra, rm, rg] = await Promise.all([
-      supabase.from("asistencias").select("semana").order("semana", { ascending: true }),
-      supabase.from("ventas_mesero").select("semana").order("semana", { ascending: true }),
-      supabase.from("ventas_grupo").select("semana").order("semana", { ascending: true }),
-    ]);
-
-    const semsA = [...new Set((ra.data||[]).map(r => r.semana))];
-    const semsM = [...new Set((rm.data||[]).map(r => r.semana))];
-    const semsG = [...new Set((rg.data||[]).map(r => r.semana))];
+    // Semanas disponibles en Supabase (cacheadas 5 min)
+    const { semsA, semsM, semsG } = await getSemsDisponibles();
 
     // ── Asistencias: exacta o la más reciente disponible (con fallback)
     const semanaAsist = semsA.includes(semana)
@@ -231,4 +247,7 @@ router.get("/historico", async (req, res) => {
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+function invalidarSemanas() { _semsCache.ts = 0; }
+
 module.exports = router;
+module.exports.invalidarSemanas = invalidarSemanas;

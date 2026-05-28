@@ -25,7 +25,7 @@ router.post("/foto", async (req, res) => {
     const type = validTypes.includes(mediaType) ? mediaType : "image/jpeg";
 
     const msg = await anthropic.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       messages: [{
         role: "user",

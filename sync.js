@@ -1,5 +1,6 @@
 const router   = require("express").Router();
-const { syncSemanal } = require("./driveSync");
+const { syncSemanal }       = require("./driveSync");
+const { invalidarSemanas }  = require("./dashboard");
 
 // POST /api/sync/manual
 router.post("/manual", async (req, res) => {
@@ -11,6 +12,7 @@ router.post("/manual", async (req, res) => {
           const force = req.body?.force === true;
           console.log(`[SYNC MANUAL] Iniciado (force=${force})`);
           const resultado = await syncSemanal(force);
+          invalidarSemanas();
           res.json({ ok: true, resultado });
     } catch (err) {
           console.error("[SYNC MANUAL] Error:", err.message);

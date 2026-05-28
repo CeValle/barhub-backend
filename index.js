@@ -55,8 +55,10 @@ app.get("/barhub", (_req, res) => {
 cron.schedule("0 21 * * 5", async () => {
     console.log("[CRON] Iniciando sync: " + new Date().toISOString());
     try {
-        const { syncSemanal } = require("./driveSync");
+        const { syncSemanal }      = require("./driveSync");
+        const { invalidarSemanas } = require("./dashboard");
         const resultado = await syncSemanal();
+        invalidarSemanas();
         console.log("[CRON] Completado:", JSON.stringify(resultado));
     } catch (err) {
         console.error("[CRON] Error:", err.message);
