@@ -2,10 +2,10 @@
   "name": "barhub-backend",
   "version": "1.0.0",
   "description": "Backend FP&A BarHub - Soja Restoran Mexicali",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node src/index.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
