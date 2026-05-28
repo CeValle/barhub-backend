@@ -1,7 +1,6 @@
 require("dotenv").config();
 const express = require("express");
 const cors    = require("cors");
-const cron    = require("node-cron");
 const path    = require("path");
 const fs      = require("fs");
 
@@ -51,19 +50,6 @@ app.get("/barhub", (_req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
 });
-
-cron.schedule("0 21 * * 5", async () => {
-    console.log("[CRON] Iniciando sync: " + new Date().toISOString());
-    try {
-        const { syncSemanal }      = require("./driveSync");
-        const { invalidarSemanas } = require("./dashboard");
-        const resultado = await syncSemanal();
-        invalidarSemanas();
-        console.log("[CRON] Completado:", JSON.stringify(resultado));
-    } catch (err) {
-        console.error("[CRON] Error:", err.message);
-    }
-}, { timezone: "America/Hermosillo" });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
