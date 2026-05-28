@@ -36,6 +36,20 @@ CREATE TABLE IF NOT EXISTS asistencias (
   UNIQUE(semana, nombre)
 );
 
+-- Compras / gastos variables
+CREATE TABLE IF NOT EXISTS compras (
+  id          SERIAL PRIMARY KEY,
+  semana      TEXT NOT NULL,
+  fecha       TEXT,
+  proveedor   TEXT NOT NULL,
+  descripcion TEXT,
+  monto       NUMERIC DEFAULT 0,
+  area        TEXT DEFAULT 'compartido',
+  estado_pago TEXT DEFAULT 'pagado',
+  plazo_dias  INT  DEFAULT NULL,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Nómina calculada por semana
 CREATE TABLE IF NOT EXISTS nomina_semanal (
   id            SERIAL PRIMARY KEY,

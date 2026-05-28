@@ -4,6 +4,13 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>BarHub · Soja Restoran · Mexicali</title>
+<link rel="manifest" href="/manifest.json"/>
+<meta name="theme-color" content="#4ADE80"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="BarHub"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<link rel="apple-touch-icon" href="/barhub-icon.svg"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -1088,6 +1095,10 @@ function TabCompras({data,semana,loadData}){
   const [fecha,setFecha]=useState(fmt(new Date()));
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
+  const [estadoPago,setEstadoPago]=useState("pagado");
+  const [plazoDias,setPlazoDias]=useState(30);
+  const [fotoPreview,setFotoPreview]=useState(null);
+  const [extracting,setExtracting]=useState(false);
 
   const sugs=area==="bar"?PROVEEDORES_BAR:area==="cocina"?PROVEEDORES_COCINA:PROVEEDORES_COMP;
 
@@ -1101,10 +1112,10 @@ function TabCompras({data,semana,loadData}){
     setSaving(true);setError("");
     try{
       const r=await fetch(API+"/api/compras",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},
-        body:JSON.stringify({semana:semana.key,fecha,proveedor:proveedor.trim(),descripcion,monto:+monto,area})});
+        body:JSON.stringify({semana:semana.key,fecha,proveedor:proveedor.trim(),descripcion,monto:+monto,area,estado_pago:estadoPago,plazo_dias:estadoPago==="credito"?plazoDias:null})});
       const d=await r.json();
       if(!d.ok)throw new Error(d.error);
-      setProveedor("");setDescripcion("");setMonto("");setFecha(fmt(new Date()));
+      setProveedor("");setDescripcion("");setMonto("");setFecha(fmt(new Date()));setEstadoPago("pagado");setPlazoDias(30);setFotoPreview(null);
       if(loadData)await loadData(semana.key);
     }catch(e){setError(e.message);}
     setSaving(false);
@@ -1114,6 +1125,33 @@ function TabCompras({data,semana,loadData}){
     if(!confirm("¿Eliminar este gasto?"))return;
     await fetch(API+"/api/compras/"+id,{method:"DELETE",headers:{"x-app-secret":"BarHub2026"}});
     if(loadData)await loadData(semana.key);
+  };
+
+  const handleFoto=async(e)=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    setExtracting(true);setError("");
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const dataUrl=ev.target.result;
+      setFotoPreview(dataUrl);
+      const base64=dataUrl.split(",")[1];
+      const mediaType=file.type||"image/jpeg";
+      try{
+        const r=await fetch(API+"/api/compras/foto",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({imagen:base64,mediaType})});
+        const d=await r.json();
+        if(d.ok&&d.data){
+          if(d.data.proveedor)setProveedor(d.data.proveedor);
+          if(d.data.monto!=null)setMonto(String(d.data.monto));
+          if(d.data.fecha)setFecha(d.data.fecha);
+          if(d.data.descripcion)setDescripcion(d.data.descripcion);
+          if(d.data.area&&["bar","cocina","compartido"].includes(d.data.area))setArea(d.data.area);
+        }else setError(d.error||"No se pudieron extraer datos de la imagen");
+      }catch(err){setError("Error al procesar imagen: "+err.message);}
+      setExtracting(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value="";
   };
 
   const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal};
@@ -1131,7 +1169,21 @@ function TabCompras({data,semana,loadData}){
 
       {/* Formulario */}
       <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,padding:16}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.ink3,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>Registrar Compra / Gasto Variable</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Registrar Compra / Gasto Variable</div>
+          <label style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderRadius:6,border:"1px solid "+(extracting?C.blue:C.border),background:extracting?C.blue+"15":C.s3,color:extracting?C.blue:C.ink3,fontSize:10,cursor:extracting?"default":"pointer",fontWeight:600,transition:"all .2s",whiteSpace:"nowrap"}}>
+            <input type="file" accept="image/*" capture="environment" onChange={handleFoto} disabled={extracting} style={{display:"none"}}/>
+            {extracting?"⏳ Extrayendo...":"📷 Foto ticket"}
+          </label>
+        </div>
+        {fotoPreview&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"8px 12px",background:C.s3,borderRadius:8,border:"1px solid "+C.greenDim}}>
+          <img src={fotoPreview} alt="ticket" style={{height:64,width:64,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid "+C.border}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:9,color:C.green,fontWeight:700,marginBottom:2}}>✓ Imagen cargada · datos pre-llenados</div>
+            <div style={{fontSize:8,color:C.ink4}}>Verifica y corrige los campos antes de guardar</div>
+          </div>
+          <button onClick={()=>setFotoPreview(null)} style={{background:"none",border:"none",color:C.ink4,fontSize:16,cursor:"pointer",padding:"0 4px"}}>✕</button>
+        </div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
           <div>
             <div style={{fontSize:9,color:C.ink3,marginBottom:4}}>ÁREA</div>
@@ -1163,6 +1215,22 @@ function TabCompras({data,semana,loadData}){
             {saving?"...":"＋ Agregar"}
           </button>
         </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginTop:10}}>
+          <span style={{fontSize:9,color:C.ink3,textTransform:"uppercase",letterSpacing:0.5}}>Pago:</span>
+          {["pagado","credito"].map(op=>(
+            <button key={op} onClick={()=>setEstadoPago(op)}
+              style={{padding:"4px 14px",borderRadius:5,border:"1px solid "+(estadoPago===op?(op==="pagado"?C.green:C.amber):C.border),background:estadoPago===op?(op==="pagado"?C.green+"20":C.amber+"20"):"none",color:estadoPago===op?(op==="pagado"?C.green:C.amber):C.ink4,fontSize:10,cursor:"pointer",fontWeight:estadoPago===op?700:400,transition:"all .15s"}}>
+              {op==="pagado"?"✓ Pagado":"Crédito"}
+            </button>
+          ))}
+          {estadoPago==="credito"&&(
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <input type="number" min="1" max="365" value={plazoDias} onChange={e=>setPlazoDias(+e.target.value||30)}
+                style={{width:52,padding:"4px 6px",background:C.s3,border:"1px solid "+C.amber,borderRadius:5,color:C.amber,fontSize:11,fontFamily:"monospace",textAlign:"right"}}/>
+              <span style={{fontSize:9,color:C.ink4}}>días</span>
+            </div>
+          )}
+        </div>
         {error&&<div style={{color:C.red,fontSize:10,marginTop:8}}>{error}</div>}
       </div>
 
@@ -1171,8 +1239,8 @@ function TabCompras({data,semana,loadData}){
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:C.s3}}>
-              {["Fecha","Proveedor","Descripción","Área","Monto",""].map((h,i)=>(
-                <th key={i} style={{padding:"8px 12px",textAlign:i>=4?"right":"left",fontSize:9,color:C.ink3,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{h}</th>
+              {["Fecha","Proveedor","Descripción","Área","Monto","Pago",""].map((h,i)=>(
+                <th key={i} style={{padding:"8px 12px",textAlign:i===4?"right":"left",fontSize:9,color:C.ink3,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -1191,6 +1259,12 @@ function TabCompras({data,semana,loadData}){
                   </span>
                 </td>
                 <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:C.green,fontSize:12}}>{mxn(c.monto||0)}</td>
+                <td style={{padding:"8px 12px"}}>
+                  {c.estado_pago==="credito"
+                    ?<span style={{padding:"2px 8px",borderRadius:10,background:C.amber+"20",color:C.amber,fontSize:9,fontWeight:700,whiteSpace:"nowrap"}}>Crédito {c.plazo_dias}d</span>
+                    :<span style={{padding:"2px 8px",borderRadius:10,background:C.green+"20",color:C.green,fontSize:9,fontWeight:700}}>✓ Pagado</span>
+                  }
+                </td>
                 <td style={{padding:"8px 12px",textAlign:"right"}}>
                   <button onClick={()=>handleDel(c.id)} style={{background:"transparent",border:"none",color:C.red,cursor:"pointer",fontSize:14,lineHeight:1}}>✕</button>
                 </td>
@@ -1208,6 +1282,7 @@ function TabCompras({data,semana,loadData}){
                 </td>
                 <td style={{padding:"8px 12px",color:C.ink3,fontSize:10}}>Total</td>
                 <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:C.green,fontSize:13}}>{mxn(totalGen)}</td>
+                <td/>
                 <td/>
               </tr>
             </tfoot>
@@ -1892,6 +1967,13 @@ function App(){
 }
 
 ReactDOM.render(<App/>,document.getElementById("root"));
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/sw.js',{scope:'/barhub'})
+      .catch(err=>console.warn('[SW] No se pudo registrar:',err));
+  });
+}
 </script>
 </body>
 </html>
