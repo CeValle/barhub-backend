@@ -2,6 +2,8 @@ const { google }   = require("googleapis");
 const Anthropic    = require("@anthropic-ai/sdk");
 const { supabase } = require("./supabase");
 
+const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
 // ── Constantes ───────────────────────────────────────────────────────────────
 const MESES = {
   enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
@@ -89,7 +91,7 @@ function semanaGrupo(nombre) {
 }
 
 // ── Buscar PDFs en Drive ─────────────────────────────────────────────────────
-async function buscarPDFs(drive, patron, diasAtras = 120) {
+async function buscarPDFs(drive, patron, diasAtras = 21) {
   const desde = new Date();
   desde.setDate(desde.getDate() - diasAtras);
   const q = `name contains '${patron}' and mimeType='application/pdf' and modifiedTime > '${desde.toISOString()}'`;
@@ -100,62 +102,40 @@ async function buscarPDFs(drive, patron, diasAtras = 120) {
 }
 
 // ── Extraer datos de PDF con Claude ──────────────────────────────────────────
+const MAX_TOKENS = { ventas_mesero: 600, ventas_grupo: 1200, asistencias: 400 };
+
+const PROMPTS = {
+  ventas_mesero:
+    "PDF SoftRestaurant — ventas por mesero. Columnas: MESERO, VENTA, TARJETA (prop_tarjeta), PROPINA (propina en tarjeta), EFECTIVO, COMENSALES.\n" +
+    "Responde SOLO JSON array:\n" +
+    '[{"nombre":"","venta":0,"prop_tarjeta":0,"propina":0,"efectivo":0,"comensales":0}]',
+
+  ventas_grupo:
+    "PDF SoftRestaurant — ventas por grupo. Extrae TODOS los grupos y subgrupos que aparezcan.\n" +
+    "Regla: si una línea está indentada bajo otra, es subgrupo de esa línea padre.\n" +
+    "Responde SOLO JSON array:\n" +
+    '[{"grupo":"nombre","venta":0,"es_subgrupo":false,"grupo_padre":null}]',
+
+  asistencias:
+    "PDF SoftRestaurant — asistencia de empleados.\n" +
+    "Responde SOLO JSON array:\n" +
+    '[{"nombre":"","horas_reales":0,"dias_asistidos":0}]',
+};
+
 async function extraerDatos(drive, fileId, tipo) {
-  const ai   = new Anthropic();
   const resp = await drive.files.get({ fileId, alt:"media" }, { responseType:"arraybuffer" });
   const b64  = Buffer.from(resp.data).toString("base64");
 
-  const prompts = {
-    ventas_mesero: `Extrae datos de ventas por mesero de este PDF SoftRestaurant.
-Columnas del PDF: MESERO, VENTA, TARJETA, PROPINA, EFECTIVO, COMENSALES.
-- prop_tarjeta = columna TARJETA (monto pagado con tarjeta)
-- propina = columna PROPINA (propina en tarjeta, campo separado de TARJETA)
-Devuelve SOLO JSON array sin texto adicional:
-[{"nombre":"...","venta":número,"prop_tarjeta":número,"propina":número,"efectivo":número,"comensales":número}]`,
-    ventas_grupo: `Extrae las ventas por grupo de este reporte SoftRestaurant.
-La estructura tiene grupos principales y subgrupos. Devuelve TODOS según esta jerarquía exacta:
-SOLO JSON array sin texto adicional:
-[{"grupo":"Alimentos","venta":número,"es_subgrupo":false,"grupo_padre":null},
-{"grupo":"Extras","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Chun kun","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Hamburguesas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Pizzas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Alitas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Boneless","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Costillas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Hotdog","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Nachos","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Papas","venta":número,"es_subgrupo":true,"grupo_padre":"Alimentos"},
-{"grupo":"Bebidas","venta":número,"es_subgrupo":false,"grupo_padre":null},
-{"grupo":"Bebidas s/alcohol","venta":número,"es_subgrupo":true,"grupo_padre":"Bebidas"},
-{"grupo":"Cartones","venta":número,"es_subgrupo":false,"grupo_padre":null},
-{"grupo":"Cerveza","venta":número,"es_subgrupo":false,"grupo_padre":null},
-{"grupo":"Cerveza Artesanal","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
-{"grupo":"Cerveza Importada","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
-{"grupo":"Cerveza Nacional","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
-{"grupo":"Cubetas","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
-{"grupo":"Bull","venta":número,"es_subgrupo":true,"grupo_padre":"Cerveza"},
-{"grupo":"Litros/Mezcladores","venta":número,"es_subgrupo":false,"grupo_padre":null},
-{"grupo":"Mixologia","venta":número,"es_subgrupo":false,"grupo_padre":null},
-{"grupo":"Fuertes","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
-{"grupo":"Refrescantes","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
-{"grupo":"Especialidades","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
-{"grupo":"Shots","venta":número,"es_subgrupo":true,"grupo_padre":"Mixologia"},
-{"grupo":"Seltzers","venta":número,"es_subgrupo":false,"grupo_padre":null}]`,
-    asistencias: `Extrae la asistencia de empleados de este reporte.
-Devuelve SOLO un JSON array sin texto adicional:
-[{"nombre":"...","horas_reales":número,"dias_asistidos":número}]`
-  };
-
   const msg = await ai.messages.create({
-    model:"claude-sonnet-4-6", max_tokens:2000,
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: MAX_TOKENS[tipo] || 800,
     messages:[{ role:"user", content:[
       { type:"document", source:{ type:"base64", media_type:"application/pdf", data:b64 } },
-      { type:"text", text:prompts[tipo] }
+      { type:"text", text: PROMPTS[tipo] }
     ]}]
   });
 
-  const texto = msg.content.find(c=>c.type==="text")?.text || "[]";
+  const texto = msg.content.find(c => c.type === "text")?.text || "[]";
   try {
     return JSON.parse(texto.replace(/```json?|```/g,"").trim());
   } catch(e) {

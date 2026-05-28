@@ -1,0 +1,15 @@
+{
+  "name": "BarHub · Soja Restoran",
+  "short_name": "BarHub",
+  "description": "Dashboard FP&A · Soja Restoran Mexicali",
+  "start_url": "/barhub",
+  "scope": "/barhub",
+  "display": "standalone",
+  "background_color": "#0D0F0E",
+  "theme_color": "#4ADE80",
+  "orientation": "any",
+  "icons": [
+    { "src": "/barhub-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/barhub-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
