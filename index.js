@@ -6,7 +6,7 @@ const fs      = require("fs");
 
 const app = express();
 app.use(cors({ origin: "*", methods: ["GET","POST","OPTIONS"], allowedHeaders: ["Content-Type","x-app-secret"] }));
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
 
 app.use("/api/sync",      require("./sync"));
 app.use("/api/nomina",    require("./nomina"));
@@ -49,6 +49,16 @@ app.get("/barhub", (_req, res) => {
     const html = fs.readFileSync(htmlPath, "utf8");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
+});
+
+// Manejador de errores global — siempre devuelve JSON, nunca HTML
+app.use((err, _req, res, _next) => {
+    if (err.type === "entity.too.large")
+        return res.status(413).json({ ok: false, error: "Imagen demasiado grande (máx 15 MB)" });
+    if (err.status === 400 && err.type === "entity.parse.failed")
+        return res.status(400).json({ ok: false, error: "JSON inválido en el body" });
+    console.error("[ERROR]", err.message);
+    res.status(err.status || 500).json({ ok: false, error: err.message });
 });
 
 const PORT = process.env.PORT || 3000;

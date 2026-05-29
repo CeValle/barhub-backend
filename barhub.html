@@ -1130,28 +1130,54 @@ function TabCompras({data,semana,loadData}){
   const handleFoto=async(e)=>{
     const file=e.target.files[0];
     if(!file)return;
-    setExtracting(true);setError("");
-    const reader=new FileReader();
-    reader.onload=async(ev)=>{
-      const dataUrl=ev.target.result;
-      setFotoPreview(dataUrl);
-      const base64=dataUrl.split(",")[1];
-      const mediaType=file.type||"image/jpeg";
-      try{
-        const r=await fetch(API+"/api/compras/foto",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({imagen:base64,mediaType})});
-        const d=await r.json();
-        if(d.ok&&d.data){
-          if(d.data.proveedor)setProveedor(d.data.proveedor);
-          if(d.data.monto!=null)setMonto(String(d.data.monto));
-          if(d.data.fecha)setFecha(d.data.fecha);
-          if(d.data.descripcion)setDescripcion(d.data.descripcion);
-          if(d.data.area&&["bar","cocina","compartido"].includes(d.data.area))setArea(d.data.area);
-        }else setError(d.error||"No se pudieron extraer datos de la imagen");
-      }catch(err){setError("Error al procesar imagen: "+err.message);}
-      setExtracting(false);
-    };
-    reader.readAsDataURL(file);
     e.target.value="";
+    setExtracting(true);setError("");
+    try{
+      // Comprimir con canvas: max 1200px, JPEG 0.85 — reduce de 5MB a ~150KB
+      const compressedDataUrl=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onerror=reject;
+        reader.onload=(ev)=>{
+          const img=new Image();
+          img.onerror=reject;
+          img.onload=()=>{
+            const MAX=1200;
+            let w=img.width,h=img.height;
+            if(w>MAX||h>MAX){
+              if(w>h){h=Math.round(h*MAX/w);w=MAX;}
+              else{w=Math.round(w*MAX/h);h=MAX;}
+            }
+            const canvas=document.createElement("canvas");
+            canvas.width=w;canvas.height=h;
+            canvas.getContext("2d").drawImage(img,0,0,w,h);
+            resolve(canvas.toDataURL("image/jpeg",0.85));
+          };
+          img.src=ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      setFotoPreview(compressedDataUrl);
+      const base64=compressedDataUrl.split(",")[1];
+      const r=await fetch(API+"/api/compras/foto",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},
+        body:JSON.stringify({imagen:base64,mediaType:"image/jpeg"})
+      });
+      if(!r.ok){
+        let msg=`Error ${r.status}`;
+        try{const t=await r.text();msg=JSON.parse(t).error||msg;}catch{}
+        throw new Error(msg);
+      }
+      const d=await r.json();
+      if(d.ok&&d.data){
+        if(d.data.proveedor)setProveedor(d.data.proveedor);
+        if(d.data.monto!=null)setMonto(String(d.data.monto));
+        if(d.data.fecha)setFecha(d.data.fecha);
+        if(d.data.descripcion)setDescripcion(d.data.descripcion);
+        if(d.data.area&&["bar","cocina","compartido"].includes(d.data.area))setArea(d.data.area);
+      }else setError(d.error||"No se pudieron extraer datos de la imagen");
+    }catch(err){setError("Error al procesar imagen: "+err.message);}
+    setExtracting(false);
   };
 
   const areaColor={bar:C.blue,cocina:C.amber,compartido:C.teal};
