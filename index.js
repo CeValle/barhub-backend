@@ -15,7 +15,7 @@ app.use("/api/dashboard", require("./dashboard"));
 app.use("/api/compras",   require("./compras"));
 app.use("/api/gastos",    require("./gastos"));
 
-app.get("/health", (_req, res) => res.json({ ok: true, project: "barhub", ts: new Date().toISOString() }));
+app.get("/health", (_req, res) => res.json({ ok: true, project: "barhub", version: "fix-foto-v5", ts: new Date().toISOString() }));
 
 // ── PWA assets ────────────────────────────────────────────────────────────────
 app.get("/manifest.json", (_req, res) => {
