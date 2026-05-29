@@ -1,4 +1,4 @@
-const CACHE = 'barhub-v2';
+const CACHE = 'barhub-v3';
 
 self.addEventListener('install', e => {
   self.skipWaiting();
