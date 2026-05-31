@@ -1013,6 +1013,28 @@ function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grup
     body += "</table>";
   }
 
+  if (incluyeTodo || seccion==="sobres") {
+    body += "<h2>Sobre de Pago &mdash; Sueldo + Propina Tarjeta</h2><table>" +
+      "<tr><th>Empleado</th><th>Puesto</th><th class='r'>Sueldo</th><th class='r'>Propina Tarjeta</th><th class='r'>Total a Entregar</th></tr>";
+    var tSuel=0,tPropT=0,tTot=0;
+    rows.forEach(function(r){
+      if(!r.enDocumento)return;
+      var tot=r.sueldo+(r.propTarjeta||0);
+      tSuel+=r.sueldo; tPropT+=(r.propTarjeta||0); tTot+=tot;
+      body+="<tr class='"+(r.adminFijo?"admin":"")+"'>"+
+        "<td><b>"+r.nombre+"</b></td><td>"+r.area+"</td>"+
+        "<td class='r'>"+(r.sueldo>0?mxnD(r.sueldo):"&mdash;")+"</td>"+
+        "<td class='r pos'>"+(r.propTarjeta>0?mxnD(r.propTarjeta):"-")+"</td>"+
+        "<td class='r total'>"+(tot>0?mxnD(tot):"&mdash;")+"</td></tr>";
+    });
+    body+="<tr style='border-top:2px solid #166534;font-weight:700'>"+
+      "<td colspan='2'><b>TOTAL</b></td>"+
+      "<td class='r'>"+mxnD(tSuel)+"</td>"+
+      "<td class='r pos'>"+mxnD(tPropT)+"</td>"+
+      "<td class='r total'>"+mxnD(tTot)+"</td></tr></table>"+
+      "<p style='font-size:9px;color:#6b7280;margin-top:4px'>* Propina tarjeta ya descontada la comisi&oacute;n del terminal (8%)</p>";
+  }
+
   if (incluyeTodo || seccion==="ventas") {
     body += "<h2>Ventas por Grupo</h2><table>" +
       "<tr><th>Grupo</th><th class='r'>Venta</th><th class='r'>Cantidad</th><th class='r'>% Total</th></tr>";
@@ -1046,7 +1068,8 @@ function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose
     {id:"resumen",   label:"Solo resumen ejecutivo", icon:"📊"},
     {id:"nomina",    label:"Solo nómina",            icon:"◉"},
     {id:"asistencias",label:"Solo asistencias",      icon:"📅"},
-    {id:"ventas",    label:"Solo ventas",            icon:"◆"},
+    {id:"sobres",    label:"Sueldo + Propina tarjeta", icon:"💵"},
+    {id:"ventas",    label:"Solo ventas",             icon:"◆"},
   ];
   const abrir=()=>{
     const html=generarReporteHTML(data,semana,overrides,comidaMap,ventasProp,grupos,seccion);
