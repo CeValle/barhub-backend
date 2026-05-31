@@ -45,6 +45,7 @@ const EMPLEADOS_BASE=[
   {nombre:"Omar",   area:"Barra",   dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
   {nombre:"Angel",  area:"Mesero",  dept:"bar",   salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
   {nombre:"Saul",   area:"Mesero",  dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
+  {nombre:"Chino",  area:"Mesero",  dept:"bar",   salDiario:214, hrsProg:10,pagoFijo:1500,adminFijo:false},
   {nombre:"Edith",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
   {nombre:"Jorge",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
   {nombre:"Erick",  area:"Comodín", dept:"bar",   salDiario:500, hrsProg:46,pagoFijo:null,adminFijo:false},
@@ -118,7 +119,7 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
     const dias=emp.adminFijo?5:(ovDias!=null?ovDias:(a?.dias_asistidos||0));
     let sueldo=0;
     if(!enDoc&&!emp.adminFijo)sueldo=0;
-    else if(pf!=null)sueldo=(emp.adminFijo||completo)?pf:Math.round((hb/hp)*pf);
+    else if(pf!=null)sueldo=(emp.adminFijo||completo)?pf:Math.round((pf/7)*dias);
     else sueldo=emp.salDiario*dias;
     const moche=mocheMap[k]||0,pt=propMap[k]||0,pp=pisoMap[k]||0,cm=(comidaMap||{})[k]||0;
     const total=sueldo-moche+pt+pp;
@@ -431,7 +432,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
               <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
               <div style={{flex:1}}>
                 <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
-                <div style={{fontSize:8,color:C.ink4}}>{emp.adminFijo?"Fijo siempre":emp.pagoFijo!=null?"Fijo semanal":"Por día · $"+emp.salDiario+"/día"}</div>
+                <div style={{fontSize:8,color:C.ink4}}>{emp.adminFijo?"Fijo siempre":emp.pagoFijo!=null?"Fijo sem · $"+Math.round(emp.pagoFijo/7)+"/día":"Por día · $"+emp.salDiario+"/día"}</div>
               </div>
               <input type="number" value={val||""} onChange={e=>{const v=parseInt(e.target.value)||null;setOverrides(p=>({...p,[k]:{...p[k],pagoFijo:v}}));}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.green,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
             </div>
