@@ -30,7 +30,7 @@ async function getSemsDisponibles(invalidar = false) {
 
 // Semana DOM-SAB actual
 function calcularSemanaActual() {
-  const hoy = new Date(), dow = hoy.getDay(), d = dow === 0 ? 7 : dow;
+  const hoy = new Date(), dow = hoy.getDay(), d = dow === 0 ? 0 : dow;
   const dom = new Date(hoy); dom.setDate(hoy.getDate() - d);
   const sab = new Date(dom); sab.setDate(dom.getDate() + 6);
   return `${FMT(dom)}_a_${FMT(sab)}`;

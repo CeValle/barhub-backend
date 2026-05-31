@@ -72,7 +72,7 @@ const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-$
 function getSemanaActual(){
   const hoy=new Date();
   const noon=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate(),12,0,0);
-  const dow=noon.getDay(),d=dow===0?7:dow;
+  const dow=noon.getDay(),d=dow===0?0:dow;
   const dom=new Date(noon.getFullYear(),noon.getMonth(),noon.getDate()-d,12,0,0);
   const sab=new Date(dom.getFullYear(),dom.getMonth(),dom.getDate()+6,12,0,0);
   return {dom,sab,key:fmt(dom)+"_a_"+fmt(sab),label:dom.getDate()+" "+MESES[dom.getMonth()].slice(0,3)+" – "+sab.getDate()+" "+MESES[sab.getMonth()].slice(0,3)};
