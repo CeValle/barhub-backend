@@ -906,17 +906,25 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
 
   // ── Separar grupos principales vs subgrupos ──────────────────────────────
   const gruposPpal=(grupos||[]).filter(g=>!g.es_subgrupo);
+  const todosSubgrupos=(grupos||[]).filter(g=>g.es_subgrupo);
+  const esCartones=g=>g.grupo.toLowerCase().includes('carton');
 
-  // Para cada grupo principal: suma venta, agrega subgrupos hijos
-  // Cerveza: incluir cualquier "cartones" aunque Claude lo clasifique separado
+  // Para cada grupo principal: calcular venta desde SUMA DE SUBGRUPOS (más preciso).
+  // Si no tiene subgrupos, usar venta del principal.
+  // Cartones → siempre van a Cerveza aunque grupo_padre sea Bebidas.
   const gruposConTotales=gruposPpal.map(g=>{
     const nombre=g.grupo.toLowerCase();
-    let venta=g.venta||0;
-    if(nombre.includes('cerveza')){
-      const cartones=(grupos||[]).filter(x=>x.grupo.toLowerCase().includes('carton')&&x!==g);
-      venta+=cartones.reduce((a,c)=>a+(c.venta||0),0);
+    const esCerveza=nombre.includes('cerveza');
+    // Hijos directos (sin Cartones — éstos se reasignan a Cerveza)
+    let hijos=todosSubgrupos.filter(s=>s.grupo_padre?.toLowerCase()===nombre&&!esCartones(s));
+    // Cerveza absorbe Cartones de cualquier grupo
+    if(esCerveza){
+      const cartones=(grupos||[]).filter(x=>esCartones(x)&&x!==g);
+      hijos=[...hijos,...cartones];
     }
-    const hijos=(grupos||[]).filter(s=>s.es_subgrupo&&s.grupo_padre?.toLowerCase()===nombre);
+    // Total = suma de subgrupos si los hay; si no, usar el valor del principal
+    const ventaHijos=hijos.reduce((a,h)=>a+(h.venta||0),0);
+    const venta=hijos.length>0?ventaHijos:(g.venta||0);
     return{...g,venta,hijos};
   });
 
