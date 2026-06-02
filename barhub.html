@@ -241,14 +241,17 @@ function Sidebar({tab,setTab,collapsed,setCollapsed}){
 }
 
 // ── PERIOD SELECTOR ──────────────────────────────────────────────────────────
-function PeriodSelector({semana,setSemanaOffset,semOffset,mes,anio}){
+function PeriodSelector({semana,setSemanaOffset,semOffset,mes,anio,mobile}){
+  const btnSz=mobile?28:22;
   return(
-    <div style={{display:"flex",alignItems:"center",gap:6}}>
-      <button onClick={()=>setSemanaOffset(o=>o-1)} style={{width:22,height:22,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:6,padding:"3px 10px",fontSize:9,color:C.ink,fontFamily:"monospace",minWidth:140,textAlign:"center"}}>
-        <span style={{color:C.ink4}}>{MESES[mes]} {anio} · </span>{semana.label}
+    <div style={{display:"flex",alignItems:"center",gap:mobile?4:6}}>
+      <button onClick={()=>setSemanaOffset(o=>o-1)} style={{width:btnSz,height:btnSz,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:6,padding:mobile?"4px 10px":"3px 10px",fontSize:mobile?10:9,color:C.ink,fontFamily:"monospace",minWidth:mobile?120:140,textAlign:"center"}}>
+        {!mobile&&<span style={{color:C.ink4}}>{MESES[mes]} {anio} · </span>}
+        {mobile&&<span style={{color:C.ink4,fontSize:8}}>{semana.key.slice(5,10)} </span>}
+        {semana.label}
       </div>
-      <button onClick={()=>setSemanaOffset(o=>o+1)} style={{width:22,height:22,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+      <button onClick={()=>setSemanaOffset(o=>o+1)} style={{width:btnSz,height:btnSz,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
       {semOffset!==0&&<button onClick={()=>setSemanaOffset(0)} style={{padding:"2px 8px",borderRadius:4,border:"1px solid "+C.greenDim,background:"none",color:C.green,cursor:"pointer",fontSize:8}}>Hoy</button>}
     </div>
   );
@@ -327,66 +330,96 @@ function KpiDrillDown({kpi,rows,data,ventasProp,onClose}){
 }
 
 // ── DASHBOARD EJECUTIVO ───────────────────────────────────────────────────────
-function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab}){
+function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab,mobile}){
   const [activeKpi,setActiveKpi]=useState(null);
   const rows=calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
   const nomTotal=rows.reduce((a,r)=>a+r.totalNeto,0);
   const nomSueldos=rows.reduce((a,r)=>a+r.sueldo,0);
   const ventasTotal=(grupos||[]).filter(g=>!g.es_subgrupo).reduce((a,g)=>a+(g.venta||0),0)||(data.ventas||[]).reduce((a,m)=>a+(m.venta||0),0);
   const propTotal=ventasProp&&ventasProp.length?ventasProp.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0):0;
+  const comprasTotal=(data.compras||[]).reduce((a,c)=>a+(c.monto||0),0);
+  const gastosFijosSemanales=(data.gastosFijos||[]).reduce((a,g)=>a+(g.monto||0),0)/4.33;
+  const utilidad=ventasTotal-nomTotal-comprasTotal-gastosFijosSemanales;
+  const margenPct=ventasTotal>0?utilidad/ventasTotal*100:0;
   const toggle=id=>setActiveKpi(a=>a===id?null:id);
+  const cols=mobile?"repeat(2,1fr)":"repeat(4,1fr)";
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {/* Hero */}
-      <div style={{background:"linear-gradient(135deg,"+C.s2+" 0%,"+C.s3+" 100%)",border:"1px solid "+C.greenDim,borderRadius:12,padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{background:"linear-gradient(135deg,"+C.s2+" 0%,"+C.s3+" 100%)",border:"1px solid "+C.greenDim,borderRadius:12,padding:mobile?"14px 16px":"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div style={{fontSize:8,letterSpacing:"0.13em",textTransform:"uppercase",color:C.ink4,marginBottom:6}}>Semana · {semana.key}</div>
-          <div style={{fontSize:22,fontWeight:800,color:C.green}}>Soja Restoran · Mexicali</div>
-          <div style={{fontSize:10,color:C.ink3,marginTop:4}}>Dashboard Ejecutivo 2026</div>
+          <div style={{fontSize:8,letterSpacing:"0.13em",textTransform:"uppercase",color:C.ink4,marginBottom:4}}>Semana</div>
+          <div style={{fontSize:mobile?16:22,fontWeight:800,color:C.green}}>Soja Restoran</div>
+          <div style={{fontSize:9,color:C.ink3,marginTop:2}}>Dashboard Ejecutivo</div>
         </div>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:8,color:C.ink4,marginBottom:4}}>Venta semanal</div>
-          <div style={{fontSize:28,fontWeight:800,color:C.green,fontFamily:"monospace"}}>{mxnD(ventasTotal)}</div>
-          <div style={{fontSize:9,color:C.ink4}}>Nómina a pagar: {mxnD(nomTotal)}</div>
+          <div style={{fontSize:8,color:C.ink4,marginBottom:2}}>Venta semanal</div>
+          <div style={{fontSize:mobile?20:28,fontWeight:800,color:C.green,fontFamily:"monospace"}}>{mxnD(ventasTotal)}</div>
+          <div style={{fontSize:9,color:C.ink4}}>Nómina: {mxnD(nomTotal)}</div>
         </div>
       </div>
 
-      {/* KPIs principales — clic para desglose */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <KPI label="Ventas totales"   value={mxnD(ventasTotal)} color={C.green}  onClick={()=>toggle("ventas")}   active={activeKpi==="ventas"}/>
-        <KPI label="Nómina neta"      value={mxnD(nomTotal)}    color={C.purple} onClick={()=>toggle("nomina")}   active={activeKpi==="nomina"}/>
-        <KPI label="Propinas tarjeta" value={mxnD(propTotal)}   sub="sem anterior" color={C.teal} onClick={()=>toggle("propinas")} active={activeKpi==="propinas"}/>
-        <KPI label="Sueldos brutos"   value={mxnD(nomSueldos)}  color={C.blue}   onClick={()=>toggle("sueldos")}  active={activeKpi==="sueldos"}/>
+      {/* KPIs — 2 cols en mobile, 4 en desktop */}
+      <div style={{display:"grid",gridTemplateColumns:cols,gap:mobile?8:10}}>
+        <KPI label="Ventas"        value={mxnD(ventasTotal)} color={C.green}  onClick={()=>toggle("ventas")}   active={activeKpi==="ventas"}/>
+        <KPI label="Nómina neta"   value={mxnD(nomTotal)}    color={C.purple} onClick={()=>toggle("nomina")}   active={activeKpi==="nomina"}/>
+        <KPI label="Prop. tarjeta" value={mxnD(propTotal)}   sub="sem anterior" color={C.teal} onClick={()=>toggle("propinas")} active={activeKpi==="propinas"}/>
+        <KPI label="Sueldos"       value={mxnD(nomSueldos)}  color={C.blue}   onClick={()=>toggle("sueldos")}  active={activeKpi==="sueldos"}/>
       </div>
 
       {/* Drill-down panel */}
       {activeKpi&&<KpiDrillDown kpi={activeKpi} rows={rows} data={data} ventasProp={ventasProp} onClose={()=>setActiveKpi(null)}/>}
 
-      {/* Módulos — clic para navegar a los activos */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+      {/* Mini P&L — Estado de Resultados rápido */}
+      <div onClick={()=>setTab&&setTab("balance")} style={{background:C.s2,border:"1px solid "+C.border,borderRadius:10,padding:"12px 16px",cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.borderColor=C.blue}
+        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.1em"}}>Estado de Resultados · Esta semana</div>
+          <div style={{fontSize:8,color:C.blue}}>Ver detalle →</div>
+        </div>
         {[
-          {label:"Nómina & Propinas",icon:"◉",value:mxnD(nomTotal),  sub:"Total a pagar", color:C.purple,ok:true,          navTo:"nomina"},
-          {label:"Ventas",           icon:"◆",value:mxnD(ventasTotal),sub:"Venta semanal", color:C.green, ok:ventasTotal>0, navTo:"ventas"},
-          {label:"Compras",          icon:"🛒",value:mxnD((data.compras||[]).reduce((a,c)=>a+(c.monto||0),0)), sub:"Gasto semanal",  color:C.amber, ok:true,  navTo:"compras"},
-          {label:"Inventarios",      icon:"📦",value:"Próx.",          sub:"En desarrollo", color:C.orange,ok:false,         navTo:null},
-          {label:"Balance General",  icon:"⚖",value:"Próx.",          sub:"Ver resultados", color:C.blue,  ok:true,          navTo:"balance"},
-          {label:"Costeos",          icon:"🧮",value:"Próx.",          sub:"En desarrollo", color:C.teal,  ok:false,         navTo:null},
-          {label:"Tickets",          icon:"🧾",value:"Próx.",          sub:"En desarrollo", color:C.pink,  ok:false,         navTo:null},
-          {label:"Facturas",         icon:"📋",value:"Próx.",          sub:"En desarrollo", color:C.red,   ok:false,         navTo:null},
+          {label:"(+) Ventas",          val:ventasTotal,            color:C.green,  neg:false},
+          {label:"(−) Nómina",          val:nomTotal,               color:C.purple, neg:true},
+          {label:"(−) Compras",         val:comprasTotal,           color:C.amber,  neg:true},
+          {label:"(−) Gastos fijos",    val:gastosFijosSemanales,   color:C.ink3,   neg:true},
+        ].map((r,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid "+C.border}}>
+            <span style={{fontSize:10,color:C.ink3}}>{r.label}</span>
+            <span style={{fontSize:11,fontFamily:"monospace",fontWeight:600,color:r.neg?C.ink3:r.color}}>{r.neg?"("+mxnD(r.val)+")":mxnD(r.val)}</span>
+          </div>
+        ))}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+          <span style={{fontSize:11,fontWeight:800,color:C.ink}}>Utilidad neta</span>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:16,fontWeight:800,fontFamily:"monospace",color:utilidad>=0?C.green:C.red}}>{mxnD(Math.abs(utilidad))}{utilidad<0?" ▼":" ▲"}</div>
+            <div style={{fontSize:9,color:C.ink4}}>Margen {margenPct.toFixed(1)}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Módulos — 1 col en mobile, 2 en desktop */}
+      <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"repeat(2,1fr)",gap:10}}>
+        {[
+          {label:"Nómina & Propinas",icon:"◉",value:mxnD(nomTotal),   sub:"Total a pagar",  color:C.purple,ok:true, navTo:"nomina"},
+          {label:"Ventas",           icon:"◆",value:mxnD(ventasTotal), sub:"Venta semanal",  color:C.green, ok:ventasTotal>0,navTo:"ventas"},
+          {label:"Compras",          icon:"🛒",value:mxnD(comprasTotal),sub:"Gasto semanal",  color:C.amber, ok:true, navTo:"compras"},
+          {label:"Balance General",  icon:"⚖",value:mxnD(utilidad),   sub:"Utilidad semanal",color:utilidad>=0?C.green:C.red,ok:true,navTo:"balance"},
+          {label:"Inventarios",      icon:"📦",value:"Próx.",           sub:"En desarrollo",  color:C.orange,ok:false,navTo:null},
+          {label:"Costeos",          icon:"🧮",value:"Próx.",           sub:"En desarrollo",  color:C.teal,  ok:false,navTo:null},
         ].map((m,i)=>(
           <div key={i}
             onClick={()=>m.ok&&m.navTo&&setTab&&setTab(m.navTo)}
             onMouseEnter={e=>{if(m.ok&&m.navTo)e.currentTarget.style.borderColor=m.color;}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
-            style={{background:C.s2,border:"1px solid "+C.border,borderRadius:8,padding:"12px 14px",display:"flex",alignItems:"center",gap:12,opacity:m.ok?1:0.5,cursor:m.ok&&m.navTo?"pointer":"default",transition:"border-color .15s"}}>
-            <div style={{width:36,height:36,borderRadius:8,background:m.color+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{m.icon}</div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:8,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.08em"}}>{m.label}</div>
-              <div style={{fontSize:15,fontWeight:700,color:m.ok?m.color:C.ink4,fontFamily:"monospace"}}>{m.value}</div>
-              <div style={{fontSize:8,color:C.ink4}}>{m.ok&&m.navTo?"→ ver detalle":m.sub}</div>
+            style={{background:C.s2,border:"1px solid "+C.border,borderRadius:8,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,opacity:m.ok?1:0.5,cursor:m.ok&&m.navTo?"pointer":"default",transition:"border-color .15s"}}>
+            <div style={{width:34,height:34,borderRadius:8,background:m.color+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{m.icon}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:8,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:2}}>{m.label}</div>
+              <div style={{fontSize:14,fontWeight:700,color:m.ok?m.color:C.ink4,fontFamily:"monospace"}}>{m.value}</div>
             </div>
-            <div style={{width:8,height:8,borderRadius:"50%",background:m.ok?C.green:C.ink4,flexShrink:0}}/>
+            {m.ok&&m.navTo&&<span style={{fontSize:10,color:C.ink4}}>›</span>}
           </div>
         ))}
       </div>
@@ -931,7 +964,7 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey}){
 }
 
 // ── MÓDULO DE REPORTES ──────────────────────────────────────────────────────
-function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grupos, seccion) {
+function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grupos, seccion, empFiltro) {
   var rows = calcNomina(data.asistencias, data.ventas, overrides, comidaMap, ventasProp);
   var ts=0,tm=0,tt=0,tp=0,tcm=0,tNet=0;
   rows.forEach(function(r){ ts+=r.sueldo; tm+=r.moche; tt+=r.propTarjeta; tp+=r.propPiso; tcm+=r.comida; tNet+=r.totalNeto; });
@@ -1058,50 +1091,97 @@ function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grup
     body += "</table>";
   }
 
+  // ── Reporte por empleado ────────────────────────────────────────────────────
+  if (seccion==="empleado" && empFiltro) {
+    var emp = rows.find(function(r){ return r.nombre.toLowerCase()===empFiltro.toLowerCase(); });
+    if (emp) {
+      body += "<h2>Detalle de Empleado — " + emp.nombre + "</h2>";
+      body += "<div class='kpi'><div class='kpi-label'>Puesto</div><div class='kpi-val' style='font-size:14px'>" + emp.area + "</div></div>" +
+        "<div class='kpi'><div class='kpi-label'>Sueldo neto</div><div class='kpi-val'>" + mxnD(emp.totalNeto) + "</div></div>" +
+        "<div class='kpi'><div class='kpi-label'>Propina tarjeta</div><div class='kpi-val'>" + mxnD(emp.propTarjeta) + "</div></div>" +
+        "<div class='kpi'><div class='kpi-label'>Días asistidos</div><div class='kpi-val'>" + emp.dias + "</div></div>";
+      body += "<h2 style='margin-top:20px'>Desglose</h2><table>" +
+        "<tr><th>Concepto</th><th class='r'>Monto</th></tr>" +
+        "<tr><td>Sueldo base</td><td class='r'><b>" + mxnD(emp.sueldo) + "</b></td></tr>" +
+        (emp.moche>0?"<tr><td>(−) Moche (" + PCT_MOCHE*100 + "%)</td><td class='r neg'>(" + mxnD(emp.moche) + ")</td></tr>":"") +
+        (emp.propTarjeta>0?"<tr><td>(+) Propina tarjeta</td><td class='r pos'>" + mxnD(emp.propTarjeta) + "</td></tr>":"") +
+        (emp.propPiso>0?"<tr><td>(+) Propina piso</td><td class='r pos'>" + mxnD(emp.propPiso) + "</td></tr>":"") +
+        (emp.comida>0?"<tr><td>(−) Comida</td><td class='r neg'>(" + mxnD(emp.comida) + ")</td></tr>":"") +
+        "<tr style='border-top:2px solid #166534;font-weight:700'><td><b>TOTAL A PAGAR</b></td><td class='r total pos'>" + mxnD(emp.totalNeto) + "</td></tr>" +
+        "</table>";
+      body += "<h2>Asistencia</h2><table>" +
+        "<tr><th>Horas programadas</th><th>Horas reales</th><th>Días asistidos</th><th>Cumplimiento</th></tr>" +
+        "<tr><td>" + (emp.adminFijo?"Fijo":emp.hrsProg+"h") + "</td>" +
+        "<td>" + (emp.adminFijo?"Fijo":emp.horasReales+"h") + "</td>" +
+        "<td>" + emp.dias + "</td>" +
+        "<td>" + (emp.adminFijo?"N/A":emp.hrsProg>0?(emp.horasReales/emp.hrsProg*100).toFixed(0)+"%":"—") + "</td></tr>" +
+        "</table>";
+    } else {
+      body += "<p>No se encontraron datos para el empleado seleccionado.</p>";
+    }
+  }
+
   return "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Reporte " + semana.key + "</title><style>" + css + "</style></head><body>" + body + "</body></html>";
 }
 
-function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose}){
+function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose,mobile}){
   const [seccion,setSeccion]=useState("todo");
+  const [empFiltro,setEmpFiltro]=useState("");
   const opciones=[
-    {id:"todo",      label:"Reporte completo",       icon:"📄"},
-    {id:"resumen",   label:"Solo resumen ejecutivo", icon:"📊"},
-    {id:"nomina",    label:"Solo nómina",            icon:"◉"},
-    {id:"asistencias",label:"Solo asistencias",      icon:"📅"},
-    {id:"sobres",    label:"Sueldo + Propina tarjeta", icon:"💵"},
-    {id:"ventas",    label:"Solo ventas",             icon:"◆"},
+    {id:"todo",       label:"Reporte completo",          icon:"📄"},
+    {id:"resumen",    label:"Solo resumen ejecutivo",    icon:"📊"},
+    {id:"nomina",     label:"Solo nómina",               icon:"◉"},
+    {id:"asistencias",label:"Solo asistencias",          icon:"📅"},
+    {id:"sobres",     label:"Sueldo + Propina tarjeta",  icon:"💵"},
+    {id:"empleado",   label:"Detalle por empleado",      icon:"👤"},
+    {id:"ventas",     label:"Solo ventas",               icon:"◆"},
   ];
   const abrir=()=>{
-    const html=generarReporteHTML(data,semana,overrides,comidaMap,ventasProp,grupos,seccion);
+    const html=generarReporteHTML(data,semana,overrides,comidaMap,ventasProp,grupos,seccion,empFiltro);
     const win=window.open("","_blank");
     if(win){win.document.write(html);win.document.close();setTimeout(()=>win.print(),600);}
   };
   return(
-    <div style={{position:"fixed",inset:0,background:"#000b",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000}}>
-      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,padding:28,minWidth:360,maxWidth:440}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+    <div style={{position:"fixed",inset:0,background:"#000b",display:"flex",alignItems:mobile?"flex-end":"center",justifyContent:"center",zIndex:2000}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:mobile?"12px 12px 0 0":"12px",padding:mobile?"20px 16px 28px":"28px",width:mobile?"100%":"auto",minWidth:mobile?"auto":360,maxWidth:mobile?"100%":440,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:14,fontWeight:700,color:C.ink}}>Generar Reporte</div>
             <div style={{fontSize:9,color:C.ink4,marginTop:2}}>Semana {semana.key}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:C.ink4,fontSize:18,cursor:"pointer"}}>✕</button>
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
           {opciones.map(o=>(
             <button key={o.id} onClick={()=>setSeccion(o.id)} style={{padding:"10px 14px",borderRadius:7,border:"1px solid "+(seccion===o.id?C.green:C.border),background:seccion===o.id?C.green+"15":C.s3,color:seccion===o.id?C.green:C.ink3,fontSize:11,cursor:"pointer",textAlign:"left",fontWeight:seccion===o.id?700:400}}>
               <span style={{marginRight:8}}>{o.icon}</span>{o.label}
             </button>
           ))}
         </div>
+        {/* Selector de empleado — solo para sección "empleado" */}
+        {seccion==="empleado"&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:C.ink4,marginBottom:6,fontWeight:600}}>Selecciona el empleado:</div>
+            <select value={empFiltro} onChange={e=>setEmpFiltro(e.target.value)}
+              style={{width:"100%",padding:"9px 12px",background:C.s3,border:"1px solid "+(empFiltro?C.green:C.border),borderRadius:7,color:empFiltro?C.ink:C.ink4,fontSize:12}}>
+              <option value="">— Elige un empleado —</option>
+              {EMPLEADOS_BASE.map(e=>(
+                <option key={e.nombre} value={e.nombre}>{e.nombre} · {e.area}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={{display:"flex",gap:8}}>
-          <button onClick={abrir} style={{flex:1,padding:"10px 16px",borderRadius:7,border:"none",background:C.green,color:"#000",fontSize:12,cursor:"pointer",fontWeight:700}}>
+          <button onClick={abrir} disabled={seccion==="empleado"&&!empFiltro}
+            style={{flex:1,padding:"11px 16px",borderRadius:7,border:"none",background:seccion==="empleado"&&!empFiltro?C.s3:C.green,color:seccion==="empleado"&&!empFiltro?C.ink4:"#000",fontSize:12,cursor:seccion==="empleado"&&!empFiltro?"default":"pointer",fontWeight:700}}>
             🖨 Imprimir / Guardar PDF
           </button>
-          <button onClick={onClose} style={{padding:"10px 14px",borderRadius:7,border:"1px solid "+C.border,background:"none",color:C.ink4,fontSize:12,cursor:"pointer"}}>
+          <button onClick={onClose} style={{padding:"11px 14px",borderRadius:7,border:"1px solid "+C.border,background:"none",color:C.ink4,fontSize:12,cursor:"pointer"}}>
             Cancelar
           </button>
         </div>
-        <div style={{marginTop:12,fontSize:8,color:C.ink4,textAlign:"center"}}>
+        <div style={{marginTop:10,fontSize:8,color:C.ink4,textAlign:"center"}}>
           Ctrl+P en la nueva pestaña para guardar como PDF
         </div>
       </div>
@@ -1600,14 +1680,15 @@ function BalanceMensualView({mesData,mesLoading,gfEdit,setGfEdit,gfSaving,saveGF
 }
 
 // ── TAB BALANCE GENERAL ───────────────────────────────────────────────────────
-function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}){
+function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData,mobile}){
   const compras   = data.compras    || [];
   const gfData    = data.gastosFijos|| [];
   const gastosMes = data.gastosMes  || {};
   const nomina    = calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
 
-  // ── Vista toggle: semanal / mensual ──────────────────────────────────────
+  // ── Vista toggles ────────────────────────────────────────────────────────
   const [vista,setVista]=useState("semanal");
+  const [vistaDetalle,setVistaDetalle]=useState("resumen"); // "resumen" | "detalle"
   const [mesData,setMesData]=useState(null);
   const [mesLoading,setMesLoading]=useState(false);
 
@@ -1712,14 +1793,28 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      {/* Toggle semanal / mensual */}
-      <div style={{display:"flex",gap:0,background:C.s3,borderRadius:8,padding:3,border:"1px solid "+C.border,alignSelf:"flex-start"}}>
-        {[{id:"semanal",label:"Esta semana"},{id:"mensual",label:mesLabel}].map(({id,label})=>(
-          <button key={id} onClick={()=>setVista(id)}
-            style={{background:vista===id?C.blue:"transparent",color:vista===id?"#000":C.ink3,border:"none",borderRadius:6,padding:"6px 18px",fontSize:11,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
-            {label}
-          </button>
-        ))}
+      {/* Controles: periodo + detalle */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
+        {/* Toggle semanal / mensual */}
+        <div style={{display:"flex",gap:0,background:C.s3,borderRadius:8,padding:3,border:"1px solid "+C.border}}>
+          {[{id:"semanal",label:"Esta semana"},{id:"mensual",label:mesLabel}].map(({id,label})=>(
+            <button key={id} onClick={()=>setVista(id)}
+              style={{background:vista===id?C.blue:"transparent",color:vista===id?"#000":C.ink3,border:"none",borderRadius:6,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {/* Toggle resumen / detalle — solo vista semanal */}
+        {vista==="semanal"&&(
+          <div style={{display:"flex",gap:0,background:C.s3,borderRadius:8,padding:3,border:"1px solid "+C.border}}>
+            {[{id:"resumen",label:"Resumen"},{id:"detalle",label:"Detalle Bar/Rest"}].map(({id,label})=>(
+              <button key={id} onClick={()=>setVistaDetalle(id)}
+                style={{background:vistaDetalle===id?C.green:"transparent",color:vistaDetalle===id?"#000":C.ink3,border:"none",borderRadius:6,padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Vista mensual */}
@@ -1745,14 +1840,53 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
       )}
 
       {/* KPI resumen */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <KPI label="Ventas totales"  value={mxn(ventasTot)}                  color={C.green}/>
-        <KPI label="Egresos totales" value={"("+mxn(nomTot+cpTot+gfTot)+")"} color={C.red}/>
-        <KPI label="Utilidad bruta"  value={mxn(utilTot)}                    color={utilTot>=0?C.green:C.red}/>
+      <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:mobile?8:10}}>
+        <KPI label="Ventas"          value={mxn(ventasTot)}                  color={C.green}/>
+        <KPI label="Egresos"         value={"("+mxn(nomTot+cpTot+gfTot)+")"} color={C.red}/>
+        <KPI label="Utilidad"        value={mxn(utilTot)}                    color={utilTot>=0?C.green:C.red}/>
         <KPI label="Margen"          value={pct(margen)}                      color={margen>=0?C.teal:C.red}/>
       </div>
 
-      {/* Estado de resultados */}
+      {/* Vista RESUMEN — tabla simple una columna */}
+      {vistaDetalle==="resumen"&&(
+        <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border}}>
+            <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Estado de Resultados</span>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <tbody>
+              {[
+                {label:"(+) Ventas",           val:ventasTot,            color:C.green,  neg:false,bold:false},
+                {label:"(−) Nómina total",      val:nomTot,               color:C.red,    neg:true, bold:false},
+                {label:"(−) Compras",           val:cpTot,                color:C.red,    neg:true, bold:false},
+                {label:"(−) Gastos Fijos",      val:gfTot,                color:C.red,    neg:true, bold:false,sub:"semanal prorr."},
+              ].map((r,i)=>(
+                <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
+                  <td style={{padding:"9px 16px",fontSize:11,color:C.ink3}}>
+                    {r.label}{r.sub&&<span style={{fontSize:9,color:C.ink4,marginLeft:6}}>{r.sub}</span>}
+                  </td>
+                  <td style={{padding:"9px 16px",textAlign:"right",fontFamily:"monospace",fontSize:12,fontWeight:600,color:r.color}}>
+                    {r.neg?"("+mxn(r.val)+")":mxn(r.val)}
+                  </td>
+                </tr>
+              ))}
+              <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
+                <td style={{padding:"11px 16px",fontSize:13,fontWeight:800,color:C.ink}}>Utilidad neta</td>
+                <td style={{padding:"11px 16px",textAlign:"right",fontFamily:"monospace",fontSize:15,fontWeight:800,color:utilTot>=0?C.green:C.red}}>
+                  {mxn(utilTot)}
+                </td>
+              </tr>
+              <tr style={{background:C.s3}}>
+                <td style={{padding:"4px 16px 10px",fontSize:10,color:C.ink4}}>Margen sobre ventas</td>
+                <td style={{padding:"4px 16px 10px",textAlign:"right",fontSize:11,fontWeight:700,color:margen>=0?C.teal:C.red}}>{pct(margen)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Estado de resultados DETALLADO */}
+      {vistaDetalle==="detalle"&&(
       <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
         <div style={{padding:"12px 16px",background:C.s3,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:1}}>Estado de Resultados</span>
@@ -1801,6 +1935,7 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
           </tbody>
         </table>
       </div>
+      )} {/* fin vistaDetalle==="detalle" */}
 
       {/* Gastos Fijos mensuales */}
       <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,overflow:"hidden"}}>
@@ -1891,10 +2026,36 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData}
 }
 
 // ── APP ──────────────────────────────────────────────────────────────────────
+// ── BOTTOM NAV (mobile) ──────────────────────────────────────────────────────
+const MOBILE_TABS=[
+  {id:"dashboard",icon:"◈",label:"Inicio"},
+  {id:"nomina",   icon:"◉",label:"Nómina"},
+  {id:"ventas",   icon:"◆",label:"Ventas"},
+  {id:"compras",  icon:"🛒",label:"Compras"},
+  {id:"balance",  icon:"⚖",label:"Balance"},
+];
+function BottomNav({tab,setTab}){
+  return(
+    <div style={{position:"fixed",bottom:0,left:0,right:0,height:58,background:C.surface,borderTop:"2px solid "+C.border,display:"flex",zIndex:200,boxShadow:"0 -2px 12px #0006"}}>
+      {MOBILE_TABS.map(t=>{
+        const act=tab===t.id;
+        return(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"none",border:"none",color:act?C.green:C.ink4,cursor:"pointer",padding:"6px 0",transition:"color .15s"}}>
+            <span style={{fontSize:20,lineHeight:1}}>{t.icon}</span>
+            <span style={{fontSize:8,fontWeight:act?700:400,letterSpacing:"0.02em"}}>{t.label}</span>
+            {act&&<div style={{position:"absolute",bottom:0,width:36,height:2,background:C.green,borderRadius:1}}/>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function App(){
   const [tab,setTab]         =useState("dashboard");
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const [semOffset,setSemOffset]=useState(0);
+  const [mobile,setMobile]   =useState(window.innerWidth<=680);
   const base=getSemanaActual();
   const semana=semOffset===0?base:getSemanaOffset(base,semOffset);
   const mes=semana.dom.getMonth();
@@ -1915,6 +2076,12 @@ function App(){
   const [porSemanaHistorial,setPorSemanaHistorial]=useState({});
   const [loadingHistorial,setLoadingHistorial]=useState(false);
   const anioHistorial=new Date().getFullYear();
+
+  useEffect(()=>{
+    const h=()=>setMobile(window.innerWidth<=680);
+    window.addEventListener('resize',h);
+    return()=>window.removeEventListener('resize',h);
+  },[]);
 
   const loadData=useCallback(async(semanaKey)=>{
     try{
@@ -1968,7 +2135,7 @@ function App(){
   const stCol={idle:C.ink4,checking:C.amber,online:C.green,offline:C.red,sync:C.blue}[status]||C.ink4;
 
   const renderContent=()=>{
-    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,setTab,loadData};
+    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,setTab,loadData,mobile};
     switch(tab){
       case "dashboard":   return <TabDashboard {...props}/>;
       case "nomina":      return <TabNomina {...props}/>;
@@ -1977,7 +2144,7 @@ function App(){
       case "ventas":      return <TabVentas {...props}/>;
       case "compras":     return <TabCompras  data={data} semana={semana} loadData={loadData}/>;
       case "inventarios": return <ComingSoon modulo="Inventarios" subgrupos={["Stock actual","Entradas/Salidas","Alertas","Valuación"]}/>;
-      case "balance":     return <TabBalance  data={data} semana={semana} grupos={grupos} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} loadData={loadData}/>;
+      case "balance":     return <TabBalance  data={data} semana={semana} grupos={grupos} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} loadData={loadData} mobile={mobile}/>;
       case "costeos":     return <ComingSoon modulo="Costeos" subgrupos={["Costos cocina","Costos bar","% Costo/Venta","Recetas"]}/>;
       case "tickets":     return <ComingSoon modulo="Tickets" subgrupos={["Subir foto ticket","Análisis Claude","Cruce con facturas","Resumen semanal"]}/>;
       case "facturas":    return <ComingSoon modulo="Facturas" subgrupos={["Gmail CFDI","Por proveedor","Pendientes de pago","CrossCheck órdenes"]}/>;
@@ -1987,31 +2154,35 @@ function App(){
 
   return(
     <div style={{display:"flex",height:"100vh",background:C.bg,overflow:"hidden"}}>
-      {/* SIDEBAR */}
-      <Sidebar tab={tab} setTab={setTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed}/>
+      {/* SIDEBAR — solo desktop */}
+      {!mobile&&<Sidebar tab={tab} setTab={setTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed}/>}
 
       {/* MAIN */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {/* HEADER */}
-        <div style={{background:C.surface,borderBottom:"1px solid "+C.border,padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {tab!=="dashboard"&&<button onClick={()=>setTab("dashboard")} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.greenDim,background:"none",color:C.green,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>‹ Dashboard</button>}
-            <PeriodSelector semana={semana} setSemanaOffset={setSemOffset} semOffset={semOffset} mes={mes} anio={anio}/>
+        <div style={{background:C.surface,borderBottom:"1px solid "+C.border,padding:mobile?"8px 12px":"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+            {!mobile&&tab!=="dashboard"&&<button onClick={()=>setTab("dashboard")} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.greenDim,background:"none",color:C.green,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>‹</button>}
+            <PeriodSelector semana={semana} setSemanaOffset={setSemOffset} semOffset={semOffset} mes={mes} anio={anio} mobile={mobile}/>
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:stCol}}/>
-            {msg&&<span style={{fontSize:9,color:C.ink4,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{msg}</span>}
-            <button onClick={()=>setShowReporte(true)} style={{padding:"5px 12px",borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.purple,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>📄 Reporte</button>
-            <button onClick={doSync} style={{padding:"5px 12px",borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.green,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>⟳ Sincronizar Drive</button>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:stCol,flexShrink:0}}/>
+            {!mobile&&msg&&<span style={{fontSize:9,color:C.ink4,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{msg}</span>}
+            <button onClick={()=>setShowReporte(true)} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.purple,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>📄{!mobile?" Reporte":""}</button>
+            <button onClick={doSync} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.green,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>⟳{!mobile?" Sync":""}</button>
           </div>
         </div>
 
         {/* CONTENT */}
-        <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+        <div style={{flex:1,overflowY:"auto",padding:mobile?"12px 14px 72px":"20px 24px"}}>
           {renderContent()}
         </div>
       </div>
-    {showReporte&&<ModalReporte data={data} semana={semana} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} grupos={grupos} onClose={()=>setShowReporte(false)}/>}
+
+      {/* BOTTOM NAV — solo mobile */}
+      {mobile&&<BottomNav tab={tab} setTab={setTab}/>}
+
+      {showReporte&&<ModalReporte data={data} semana={semana} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} grupos={grupos} onClose={()=>setShowReporte(false)} mobile={mobile}/>}
     </div>
   );
 }

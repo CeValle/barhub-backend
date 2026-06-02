@@ -76,18 +76,24 @@ function semanaAsistencias(p) {
 
 // Grupos → sem N MMMM → MIÉ-DOM
 function semanaGrupo(nombre) {
-  const m = nombre.match(/sem\s*(\d+)\s+(\w+)(?:\s+(\d{4}))?/i);
-  if (!m) return null;
-  const numSem = +m[1], mes = MESES[m[2].toLowerCase()], año = m[3] ? +m[3] : 2026;
-  if (!mes) return null;
-  // Primer miércoles del mes (dow=3), luego + (N-1)*7
-  const p = new Date(año, mes-1, 1);
-  const dow = p.getDay();
-  const diasAlMier = dow <= 3 ? 3 - dow : 10 - dow;
-  const primerMier = new Date(año, mes-1, 1 + diasAlMier);
-  const mier = new Date(primerMier); mier.setDate(primerMier.getDate() + (numSem-1)*7);
-  const sun  = new Date(mier); sun.setDate(mier.getDate() + 4);
-  return `${FMT(mier)}_a_${FMT(sun)}`;
+  // Patrón 1: "sem N [de] mes [año]"  (ej. "sem 3 de mayo 2026", "sem3 mayo 2026")
+  let m = nombre.match(/sem\s*(\d+)\s+(?:de\s+)?(\w+)(?:\s+(\d{4}))?/i);
+  if (m) {
+    const numSem = +m[1], mes = MESES[m[2].toLowerCase()], año = m[3] ? +m[3] : new Date().getFullYear();
+    if (mes) {
+      const p = new Date(año, mes-1, 1);
+      const dow = p.getDay();
+      const diasAlMier = dow <= 3 ? 3 - dow : 10 - dow;
+      const primerMier = new Date(año, mes-1, 1 + diasAlMier);
+      const mier = new Date(primerMier); mier.setDate(primerMier.getDate() + (numSem-1)*7);
+      const sun  = new Date(mier); sun.setDate(mier.getDate() + 4);
+      return `${FMT(mier)}_a_${FMT(sun)}`;
+    }
+  }
+  // Patrón 2: rango de fechas igual que ventas_mesero (ej. "27-31 de mayo 2026")
+  const p2 = parsearNombre(nombre);
+  if (p2) return semanaVentas(p2);
+  return null;
 }
 
 // ── Buscar PDFs en Drive ─────────────────────────────────────────────────────
@@ -176,7 +182,7 @@ async function syncSemanal(force = false) {
 
   // 2. Venta por grupo (sem N MMMM → MIÉ-DOM)
   console.log("[SYNC] Buscando ventas/grupo...");
-  for (const pdf of await buscarPDFs(drive, "Venta por grupo")) {
+  for (const pdf of await buscarPDFs(drive, "por grupo")) {
     try {
       const semana = semanaGrupo(pdf.name);
       if (!semana) { console.log(`[SYNC] Sin semana: ${pdf.name}`); continue; }
