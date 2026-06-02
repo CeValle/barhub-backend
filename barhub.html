@@ -895,23 +895,140 @@ function AsistAnual({historial,anio,loading}){
 }
 
 // ── TAB VENTAS ────────────────────────────────────────────────────────────────
-function TabVentas({data,grupos,semana,ventasProp,semPropKey}){
+function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
+  const [expandido,setExpandido]=useState(null);
   const ventasM=data.ventas||[];
   const totalM=ventasM.reduce((a,m)=>a+(m.venta||0),0);
-  const sorted=[...(grupos||[])].sort((a,b)=>(b.venta||0)-(a.venta||0));
-  const totalG=sorted.reduce((a,g)=>a+(g.venta||0),0);
-  const maxV=sorted[0]?.venta||1;
-  const cols=[C.purple,C.blue,C.teal,C.green,C.amber,C.pink,C.red];
+
+  // ── Colores por grupo ────────────────────────────────────────────────────
+  const COLORES_G={alimentos:C.amber,cerveza:C.blue,bebidas:C.purple,mixolog:C.green,litros:C.teal,mezclador:C.teal,seltzers:C.pink};
+  const colorG=n=>{const s=n.toLowerCase();for(const[k,v]of Object.entries(COLORES_G)){if(s.includes(k))return v;}return C.ink4;};
+
+  // ── Separar grupos principales vs subgrupos ──────────────────────────────
+  const gruposPpal=(grupos||[]).filter(g=>!g.es_subgrupo);
+
+  // Para cada grupo principal: suma venta, agrega subgrupos hijos
+  // Cerveza: incluir cualquier "cartones" aunque Claude lo clasifique separado
+  const gruposConTotales=gruposPpal.map(g=>{
+    const nombre=g.grupo.toLowerCase();
+    let venta=g.venta||0;
+    if(nombre.includes('cerveza')){
+      const cartones=(grupos||[]).filter(x=>x.grupo.toLowerCase().includes('carton')&&x!==g);
+      venta+=cartones.reduce((a,c)=>a+(c.venta||0),0);
+    }
+    const hijos=(grupos||[]).filter(s=>s.es_subgrupo&&s.grupo_padre?.toLowerCase()===nombre);
+    return{...g,venta,hijos};
+  });
+
+  const sortedG=[...gruposConTotales].sort((a,b)=>b.venta-a.venta);
+  const totalG=sortedG.reduce((a,g)=>a+g.venta,0);
+  const maxV=sortedG[0]?.venta||1;
+  const totalArt=(grupos||[]).filter(g=>!g.es_subgrupo).reduce((a,g)=>a+(g.cantidad||0),0);
+  const difPct=totalG>0?Math.abs(totalG-totalM)/totalG*100:0;
+  const cuadra=difPct<1;
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <KPI label="Venta total (grupos)" value={mxnD(totalG)} color={C.green}/>
-        <KPI label="Venta por mesero" value={mxnD(totalM)} color={C.blue}/>
-        <KPI label="Grupos distintos" value={sorted.length} color={C.purple}/>
-        <KPI label="Artículos vendidos" value={sorted.reduce((a,g)=>a+(g.cantidad||0),0).toLocaleString("es-MX")} sub="unidades" color={C.teal}/>
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:mobile?8:10}}>
+        <KPI label="Venta grupos" value={mxnD(totalG)} color={C.green}/>
+        <KPI label="Venta meseros" value={mxnD(totalM)} color={C.blue}/>
+        <KPI label="Grupos" value={sortedG.length} color={C.purple}/>
+        <KPI label="Artículos" value={totalArt.toLocaleString("es-MX")} sub="unidades" color={C.teal}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        <Card title={"Ventas por mesero · "+semana.label}>
+
+      {/* Sin datos */}
+      {sortedG.length===0&&(
+        <div style={{background:C.s2,border:"1px dashed "+C.amber,borderRadius:8,padding:"12px 16px",fontSize:11,color:C.amber,textAlign:"center"}}>
+          ⚠ Sin ventas por grupo. Sincroniza Drive para cargar los PDFs.
+        </div>
+      )}
+
+      {/* Tarjetas de grupos principales */}
+      {sortedG.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.1em"}}>
+            Ventas por grupo · {semana.label}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,1fr)":"repeat(3,1fr)",gap:10}}>
+            {sortedG.map(g=>{
+              const col=colorG(g.grupo);
+              const pct=totalG>0?g.venta/totalG*100:0;
+              const bw=g.venta/maxV*100;
+              const act=expandido===g.grupo;
+              return(
+                <div key={g.grupo} style={{gridColumn:act&&!mobile?"span 3":"span 1"}}>
+                  {/* Tarjeta principal */}
+                  <div onClick={()=>setExpandido(act?null:g.grupo)}
+                    style={{background:C.s2,border:"1px solid "+(act?col:C.border),borderRadius:act?"10px 10px 0 0":10,padding:"12px 14px",cursor:"pointer",transition:"border-color .15s"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:col,flexShrink:0}}/>
+                        <span style={{fontSize:11,fontWeight:700,color:C.ink}}>{g.grupo}</span>
+                      </div>
+                      <span style={{fontSize:8,color:act?col:C.ink4,fontWeight:700}}>{act?"▲ cerrar":"▼ ver"}</span>
+                    </div>
+                    <div style={{fontSize:16,fontWeight:800,fontFamily:"monospace",color:col,marginBottom:4}}>{mxnD(g.venta)}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:9,color:C.ink4}}>{pct.toFixed(1)}% del total</span>
+                      {g.hijos.length>0&&<span style={{fontSize:8,color:C.ink4}}>{g.hijos.length} subgrupos</span>}
+                    </div>
+                    {/* Barra de progreso */}
+                    <div style={{background:C.s3,borderRadius:3,height:4}}>
+                      <div style={{width:bw+"%",height:"100%",background:col,borderRadius:3,transition:"width .3s"}}/>
+                    </div>
+                  </div>
+                  {/* Subgrupos desplegables */}
+                  {act&&g.hijos.length>0&&(
+                    <div style={{background:C.s3,border:"1px solid "+col,borderTop:"none",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
+                      <div style={{padding:"6px 14px",background:col+"15",borderBottom:"1px solid "+col+"30"}}>
+                        <span style={{fontSize:9,fontWeight:700,color:col,textTransform:"uppercase",letterSpacing:"0.08em"}}>Subgrupos</span>
+                      </div>
+                      {g.hijos.sort((a,b)=>(b.venta||0)-(a.venta||0)).map((h,i)=>{
+                        const hPct=g.venta>0?(h.venta||0)/g.venta*100:0;
+                        return(
+                          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderBottom:i<g.hijos.length-1?"1px solid "+C.border:"none"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <div style={{width:4,height:4,borderRadius:"50%",background:col,opacity:0.6}}/>
+                              <span style={{fontSize:10,color:C.ink3}}>{h.grupo}</span>
+                            </div>
+                            <div style={{textAlign:"right"}}>
+                              <div style={{fontSize:11,fontFamily:"monospace",fontWeight:600,color:C.ink}}>{mxnD(h.venta||0)}</div>
+                              <div style={{fontSize:8,color:C.ink4}}>{hPct.toFixed(1)}%</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {act&&g.hijos.length===0&&(
+                    <div style={{background:C.s3,border:"1px solid "+col,borderTop:"none",borderRadius:"0 0 10px 10px",padding:"10px 14px",fontSize:10,color:C.ink4,textAlign:"center"}}>
+                      Sin subgrupos registrados
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Validación de totales */}
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:C.s2,borderRadius:8,border:"1px solid "+(cuadra?C.greenDim:C.amber+"60")}}>
+            <span style={{fontSize:14}}>{cuadra?"✓":"⚠"}</span>
+            <div style={{flex:1}}>
+              <span style={{fontSize:10,color:C.ink3}}>Grupos: <b style={{fontFamily:"monospace",color:C.green}}>{mxnD(totalG)}</b></span>
+              <span style={{fontSize:10,color:C.ink3,margin:"0 8px"}}>vs</span>
+              <span style={{fontSize:10,color:C.ink3}}>Meseros: <b style={{fontFamily:"monospace",color:C.blue}}>{mxnD(totalM)}</b></span>
+            </div>
+            <span style={{fontSize:9,color:cuadra?C.green:C.amber,fontWeight:700}}>
+              {cuadra?"Cuadran":"Dif. "+mxnD(Math.abs(totalG-totalM))}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Ventas por mesero */}
+      <Card title={"Ventas por mesero · "+semana.label}>
+        {ventasM.length===0?<div style={{color:C.ink4,fontSize:10,padding:16,textAlign:"center"}}>Sin datos de meseros esta semana.</div>:(
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <TH cols={["Mesero","Venta","Moche","Prop.T"]}/>
             <tbody>
@@ -929,36 +1046,15 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey}){
                 );
               })}
               <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
-                <td colSpan={1} style={{padding:"9px 10px",fontSize:9,fontWeight:700,color:C.ink4}}>TOTAL</td>
+                <td style={{padding:"9px 10px",fontSize:9,fontWeight:700,color:C.ink4}}>TOTAL</td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:800,color:C.green}}>{mxnD(totalM)}</td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>({mxnD(totalM*PCT_MOCHE)})</td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxnD((ventasProp||[]).reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0))}</td>
+                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxnD((ventasProp||[]).reduce((a,v)=>a+(v.propina??v.prop_tarjeta??0),0))}</td>
               </tr>
             </tbody>
           </table>
-        </Card>
-        <Card title={"Ventas por grupo · "+semana.label}>
-          {sorted.length===0?<div style={{color:C.ink4,fontSize:10,padding:20,textAlign:"center"}}>Sin datos. Sincroniza Drive.</div>:
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <TH cols={["Grupo","Venta","% ","Barra"]}/>
-            <tbody>
-              {sorted.slice(0,15).map((g,i)=>{
-                const p2=totalG>0?((g.venta||0)/totalG*100):0;
-                const bw=totalG>0?((g.venta||0)/maxV*100):0;
-                const col=cols[i%cols.length];
-                return(
-                  <tr key={i} style={{borderBottom:"1px solid "+C.border,background:i%2===0?"transparent":C.s3+"60"}}>
-                    <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:6,height:6,borderRadius:"50%",background:col}}/><span style={{fontSize:10}}>{g.grupo}</span></div></td>
-                    <td style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontFamily:"monospace",color:C.ink2}}>{mxnD(g.venta)}</td>
-                    <td style={{padding:"7px 10px",textAlign:"right",fontSize:9,fontFamily:"monospace",color:C.ink3}}>{p2.toFixed(1)}%</td>
-                    <td style={{padding:"7px 10px",minWidth:70}}><div style={{background:C.s3,borderRadius:3,height:6}}><div style={{width:bw+"%",height:"100%",background:col,borderRadius:3}}/></div></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>}
-        </Card>
-      </div>
+        )}
+      </Card>
     </div>
   );
 }
