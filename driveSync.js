@@ -27,7 +27,7 @@ function parsearNombre(nombre) {
   let n = nombre.replace(/\.pdf$/i,"")
     .replace(/^ventas\/mesero\s*/i,"")
     .replace(/^asistencias\s*/i,"")
-    .replace(/^venta por grupo\s*/i,"").trim();
+    .replace(/^ventas?\s+por\s+grupo\s*/i,"").trim();
 
   // "06-10 de mayo 2026" o "8-12 abril 2026"
   let m = n.match(/^(\d{1,2})-(\d{1,2})\s+(?:de\s+)?(\w+)\s+(\d{4})/i);
@@ -196,7 +196,7 @@ async function syncSemanal(force = false) {
       await supabase.from("ventas_grupo").delete().eq("semana", semana);
       const { error } = await supabase.from("ventas_grupo").insert(
         datos.map(d => ({ semana, grupo:d.grupo||d.nombre||"", venta:+d.venta||0,
-          porcentaje:+d.porcentaje||0, es_subgrupo:d.es_subgrupo||false,
+          es_subgrupo:d.es_subgrupo||false,
           grupo_padre:d.grupo_padre||null, updated_at:new Date().toISOString() }))
       );
       if (error) throw error;
