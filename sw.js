@@ -20,10 +20,16 @@ self.addEventListener('fetch', e => {
   // Llamadas API → siempre red, sin caché
   if (url.includes('/api/')) return;
 
-  // HTML principal (/barhub) → siempre red, sin fallback a caché
-  // Garantiza que el usuario tenga el código más reciente en cada apertura
+  // HTML principal (/barhub) → red primero; si no hay red, página de error amigable
   if (e.request.mode === 'navigate' || url.endsWith('/barhub') || url.includes('/barhub?')) {
-    e.respondWith(fetch(e.request));
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        new Response('Sin conexión — abre BarHub cuando tengas red.', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        })
+      )
+    );
     return;
   }
 

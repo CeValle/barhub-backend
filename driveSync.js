@@ -186,6 +186,7 @@ async function syncSemanal(force = false) {
   // 2. Venta por grupo (sem N MMMM → MIÉ-DOM)
   console.log("[SYNC] Buscando ventas/grupo...");
   for (const pdf of await buscarPDFs(drive, "por grupo")) {
+    if (pdf.name.toLowerCase().includes("detallado")) { console.log(`[SYNC] Saltando detallado: ${pdf.name}`); continue; }
     try {
       const semana = semanaGrupo(pdf.name);
       if (!semana) { console.log(`[SYNC] Sin semana: ${pdf.name}`); continue; }

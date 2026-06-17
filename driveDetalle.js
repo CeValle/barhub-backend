@@ -91,7 +91,7 @@ router.get("/detalle", async (req, res) => {
   if (!semana) return res.status(400).json({ ok:false, error:"Parámetro 'semana' requerido" });
 
   try {
-    if (!detalleCache[semana]) {
+    if (detalleCache[semana] === undefined) {
       console.log(`[DETALLE] Buscando PDF detallado para semana ${semana}...`);
       const drive = getDriveClient();
       const desde = new Date();
@@ -113,12 +113,21 @@ router.get("/detalle", async (req, res) => {
       }
 
       if (!fileId) {
+        // null = PDF not found (negative cache — avoids re-hitting Drive on every click)
+        detalleCache[semana] = null;
         return res.json({ ok:false, error:`PDF detallado no encontrado para semana ${semana}. PDFs disponibles: ${pdfs.map(f=>f.name).join(", ")||"ninguno"}` });
       }
 
       const items = await leerPDFDetallado(drive, fileId);
-      detalleCache[semana] = items;
-      console.log(`[DETALLE] Extraídos ${items.length} productos para semana ${semana}`);
+      // Only cache non-empty results; [] from a Claude parse failure is retried next request
+      if (items.length > 0) {
+        detalleCache[semana] = items;
+        console.log(`[DETALLE] Extraídos ${items.length} productos para semana ${semana}`);
+      }
+    }
+
+    if (detalleCache[semana] === null) {
+      return res.json({ ok:false, error:`PDF detallado no encontrado para semana ${semana}` });
     }
 
     const todos = detalleCache[semana];
