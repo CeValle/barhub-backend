@@ -8,12 +8,13 @@ const app = express();
 app.use(cors({ origin: "*", methods: ["GET","POST","OPTIONS"], allowedHeaders: ["Content-Type","x-app-secret"] }));
 app.use(express.json({ limit: "15mb" }));
 
-app.use("/api/sync",      require("./sync"));
-app.use("/api/nomina",    require("./nomina"));
-app.use("/api/propinas",  require("./propinas"));
-app.use("/api/dashboard", require("./dashboard"));
-app.use("/api/compras",   require("./compras"));
-app.use("/api/gastos",    require("./gastos"));
+app.use("/api/sync",           require("./sync"));
+app.use("/api/nomina",         require("./nomina"));
+app.use("/api/propinas",       require("./propinas"));
+app.use("/api/dashboard",      require("./dashboard"));
+app.use("/api/compras",        require("./compras"));
+app.use("/api/gastos",         require("./gastos"));
+app.use("/api/ventas-grupo",   require("./driveDetalle"));
 
 app.get("/health", (_req, res) => res.json({ ok: true, project: "barhub", version: "v6-chino-sobres", ts: new Date().toISOString() }));
 

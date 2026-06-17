@@ -108,7 +108,7 @@ async function buscarPDFs(drive, patron, diasAtras = 21) {
 }
 
 // ── Extraer datos de PDF con Claude ──────────────────────────────────────────
-const MAX_TOKENS = { ventas_mesero: 600, ventas_grupo: 1200, asistencias: 400 };
+const MAX_TOKENS = { ventas_mesero: 600, ventas_grupo: 2000, asistencias: 400 };
 
 const PROMPTS = {
   ventas_mesero:
@@ -117,10 +117,13 @@ const PROMPTS = {
     '[{"nombre":"","venta":0,"prop_tarjeta":0,"propina":0,"efectivo":0,"comensales":0}]',
 
   ventas_grupo:
-    "PDF SoftRestaurant — ventas por grupo. Extrae TODOS los grupos y subgrupos que aparezcan.\n" +
-    "Regla: si una línea está indentada bajo otra, es subgrupo de esa línea padre.\n" +
-    "Responde SOLO JSON array:\n" +
-    '[{"grupo":"nombre","venta":0,"es_subgrupo":false,"grupo_padre":null}]',
+    "PDF SoftRestaurant — reporte semanal de ventas por grupo.\n" +
+    "LAYOUT: el reporte tiene FILAS (grupos y subgrupos) y COLUMNAS de DÍAS (de izquierda a derecha: Miércoles, Jueves, Viernes, Sábado, Domingo).\n" +
+    "INSTRUCCIÓN CRÍTICA: Para el campo 'venta' de cada fila, SUMA todos los valores monetarios de cada columna de día de esa fila. NO uses ningún valor 'Total' pre-impreso en el PDF — calcúlalo tú mismo sumando las columnas.\n" +
+    "JERARQUÍA: si una fila aparece indentada bajo otra, es subgrupo. Los grupos principales tienen nivel 0; sus subgrupos están indentados debajo.\n" +
+    "Captura el nombre del grupo padre EXACTAMENTE como aparece en el PDF.\n" +
+    "Responde SOLO JSON array (sin texto extra):\n" +
+    '[{"grupo":"nombre completo","venta":0,"es_subgrupo":false,"grupo_padre":null}]',
 
   asistencias:
     "PDF SoftRestaurant — asistencia de empleados.\n" +

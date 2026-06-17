@@ -897,6 +897,9 @@ function AsistAnual({historial,anio,loading}){
 // ── TAB VENTAS ────────────────────────────────────────────────────────────────
 function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
   const [expandido,setExpandido]=useState(null);
+  const [detalleKey,setDetalleKey]=useState(null);
+  const [detalleCache,setDetalleCache]=useState({});
+  const [detalleLoading,setDetalleLoading]=useState(null);
   const ventasM=data.ventas||[];
   const totalM=ventasM.reduce((a,m)=>a+(m.venta||0),0);
 
@@ -994,16 +997,61 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
                       </div>
                       {g.hijos.sort((a,b)=>(b.venta||0)-(a.venta||0)).map((h,i)=>{
                         const hPct=g.venta>0?(h.venta||0)/g.venta*100:0;
+                        const dk=g.grupo+"|"+h.grupo;
+                        const dAct=detalleKey===dk;
+                        const dData=detalleCache[dk];
+                        const dLoad=detalleLoading===dk;
+                        const abrirDetalle=async()=>{
+                          if(dAct){setDetalleKey(null);return;}
+                          setDetalleKey(dk);
+                          if(dData!==undefined)return;
+                          setDetalleLoading(dk);
+                          try{
+                            const r=await fetch(API+"/api/ventas-grupo/detalle?semana="+encodeURIComponent(semana.key)+"&grupo="+encodeURIComponent(h.grupo),{headers:{"x-app-secret":"BarHub2026"}});
+                            const d=await r.json();
+                            setDetalleCache(c=>({...c,[dk]:d.ok?d.items:[]}));
+                          }catch(e){setDetalleCache(c=>({...c,[dk]:[]}));}
+                          setDetalleLoading(null);
+                        };
                         return(
-                          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderBottom:i<g.hijos.length-1?"1px solid "+C.border:"none"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <div style={{width:4,height:4,borderRadius:"50%",background:col,opacity:0.6}}/>
-                              <span style={{fontSize:10,color:C.ink3}}>{h.grupo}</span>
+                          <div key={i}>
+                            <div onClick={abrirDetalle} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderBottom:(!dAct&&i<g.hijos.length-1)?"1px solid "+C.border:"none",cursor:"pointer",background:dAct?col+"15":"transparent",transition:"background .15s"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <div style={{width:4,height:4,borderRadius:"50%",background:col,opacity:dAct?1:0.6}}/>
+                                <span style={{fontSize:10,color:dAct?col:C.ink3,fontWeight:dAct?700:400}}>{h.grupo}</span>
+                              </div>
+                              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                <div style={{textAlign:"right"}}>
+                                  <div style={{fontSize:11,fontFamily:"monospace",fontWeight:600,color:C.ink}}>{mxnD(h.venta||0)}</div>
+                                  <div style={{fontSize:8,color:C.ink4}}>{hPct.toFixed(1)}%</div>
+                                </div>
+                                <span style={{fontSize:8,color:col,opacity:0.8}}>{dAct?"▲":"▼"}</span>
+                              </div>
                             </div>
-                            <div style={{textAlign:"right"}}>
-                              <div style={{fontSize:11,fontFamily:"monospace",fontWeight:600,color:C.ink}}>{mxnD(h.venta||0)}</div>
-                              <div style={{fontSize:8,color:C.ink4}}>{hPct.toFixed(1)}%</div>
-                            </div>
+                            {dAct&&(
+                              <div style={{background:C.s2+"88",borderBottom:i<g.hijos.length-1?"1px solid "+C.border:"none",padding:"8px 14px 10px"}}>
+                                {dLoad?(
+                                  <div style={{fontSize:10,color:C.ink4,textAlign:"center",padding:"6px 0"}}>Cargando productos...</div>
+                                ):dData&&dData.length>0?(
+                                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                                    {[...dData].sort((a,b)=>(b.venta||0)-(a.venta||0)).map((p,pi)=>(
+                                      <div key={pi} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                                        <span style={{fontSize:9,color:C.ink3,flex:1}}>{p.producto}</span>
+                                        <span style={{fontSize:10,fontFamily:"monospace",color:C.ink,fontWeight:600,flexShrink:0}}>{mxnD(p.venta||0)}</span>
+                                      </div>
+                                    ))}
+                                    <div style={{marginTop:5,paddingTop:5,borderTop:"1px solid "+col+"30",display:"flex",justifyContent:"space-between"}}>
+                                      <span style={{fontSize:9,color:C.ink4,fontWeight:700}}>Total detalle</span>
+                                      <span style={{fontSize:10,fontFamily:"monospace",color:col,fontWeight:700}}>{mxnD(dData.reduce((a,p)=>a+(p.venta||0),0))}</span>
+                                    </div>
+                                  </div>
+                                ):(
+                                  <div style={{fontSize:10,color:C.ink4,textAlign:"center",padding:"6px 0"}}>
+                                    {dData!==undefined?"Sin productos para este subgrupo":""}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
