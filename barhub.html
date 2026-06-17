@@ -1007,7 +1007,7 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
                           if(dData!==undefined)return;
                           setDetalleLoading(dk);
                           try{
-                            const r=await fetch(API+"/api/ventas-grupo/detalle?semana="+encodeURIComponent(semana.key)+"&grupo="+encodeURIComponent(g.grupo),{headers:{"x-app-secret":"BarHub2026"}});
+                            const r=await fetch(API+"/api/ventas-grupo/detalle?semana="+encodeURIComponent(data.semanaVentas||semana.key)+"&grupo="+encodeURIComponent(g.grupo),{headers:{"x-app-secret":"BarHub2026"}});
                             const d=await r.json();
                             setDetalleCache(c=>({...c,[dk]:d.ok?d.items:[]}));
                           }catch(e){setDetalleCache(c=>({...c,[dk]:[]}));}
