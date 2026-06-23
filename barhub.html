@@ -41,8 +41,7 @@ const AREA_COLOR={Caja:C.purple,Barra:C.teal,Cocina:C.amber,Mesero:C.blue,Admin:
 // ── EMPLEADOS & CONSTANTES ───────────────────────────────────────────────────
 const EMPLEADOS_BASE=[
   {nombre:"Yulisa", area:"Caja",    dept:"bar",   salDiario:1000,hrsProg:20,pagoFijo:2000,adminFijo:false},
-  {nombre:"Alexis", area:"Barra",   dept:"bar",   salDiario:700, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Omar",   area:"Barra",   dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
+  {nombre:"Omar",   area:"Barra",   dept:"bar",   salDiario:950, hrsProg:20,pagoFijo:1500,adminFijo:false},
   {nombre:"Angel",  area:"Mesero",  dept:"bar",   salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
   {nombre:"Saul",   area:"Mesero",  dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
   {nombre:"Chino",  area:"Mesero",  dept:"bar",   salDiario:214, hrsProg:10,pagoFijo:1500,adminFijo:false},
@@ -428,8 +427,32 @@ function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab,
 }
 
 // ── MODAL EDITAR VALORES ─────────────────────────────────────────────────────
-function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
+function ModalEditar({overrides,setOverrides,data,ventasProp,semana,loadData,onClose}){
   const [tabEdit,setTabEdit]=useState("salarios");
+  const [localInputs,setLocalInputs]=useState({});
+  const changeTab=t=>{setTabEdit(t);setLocalInputs({});};
+  const [guardando,setGuardando]=useState(false);
+  const [guardMsg,setGuardMsg]=useState("");
+  const guardarDias=async()=>{
+    setGuardando(true);setGuardMsg("");
+    try{
+      const semanaKey=semana?.key||data.semanaAsist;
+      const conOverride=EMPLEADOS_BASE.filter(emp=>(overrides||{})[emp.nombre.toLowerCase()]?.diasAsistidos!=null);
+      if(!conOverride.length){setGuardMsg("Sin cambios para guardar");setGuardando(false);return;}
+      await Promise.all(conOverride.map(async emp=>{
+        const k=emp.nombre.toLowerCase();
+        const dias=(overrides||{})[k].diasAsistidos;
+        const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
+        const horas=(overrides||{})[k]?.horasReales??(a?.horas_reales||0);
+        const r=await fetch(API+"/api/dashboard/asistencia",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({semana:semanaKey,nombre:emp.nombre,dias_asistidos:dias,horas_reales:horas})});
+        const d=await r.json();
+        if(!d.ok)throw new Error(d.error||"Error "+emp.nombre);
+      }));
+      setGuardMsg("✓ Guardado en base de datos");
+      if(loadData)await loadData(semana?.key);
+    }catch(e){setGuardMsg("Error: "+e.message);}
+    setGuardando(false);
+  };
   const ventasActual=data.ventas||[];
   const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
   const todosMeseros=[...ventasActual];
@@ -446,13 +469,13 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:13,fontWeight:700}}>Editar Valores</div>
-            <div style={{fontSize:8,color:C.ink4,marginTop:2}}>Corrección manual · aplica solo esta sesión</div>
+            <div style={{fontSize:8,color:C.ink4,marginTop:2}}>Días se guardan en BD · otros aplican solo esta sesión</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:C.ink4,fontSize:18,cursor:"pointer"}}>✕</button>
         </div>
         <div style={{display:"flex",gap:0,background:C.s3,borderRadius:7,overflow:"hidden",marginBottom:16,border:"1px solid "+C.border}}>
           {TABS_EDIT.map(t=>(
-            <button key={t.id} onClick={()=>setTabEdit(t.id)} style={{flex:1,padding:"8px 2px",border:"none",borderRight:"1px solid "+C.border,background:tabEdit===t.id?C.s2:"none",color:tabEdit===t.id?C.green:C.ink4,fontSize:9,cursor:"pointer",fontWeight:tabEdit===t.id?700:400}}>
+            <button key={t.id} onClick={()=>changeTab(t.id)} style={{flex:1,padding:"8px 2px",border:"none",borderRight:"1px solid "+C.border,background:tabEdit===t.id?C.s2:"none",color:tabEdit===t.id?C.green:C.ink4,fontSize:9,cursor:"pointer",fontWeight:tabEdit===t.id?700:400}}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -467,7 +490,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
                 <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
                 <div style={{fontSize:8,color:C.ink4}}>{emp.adminFijo?"Fijo siempre":emp.pagoFijo!=null?"Fijo sem · $"+Math.round(emp.pagoFijo/7)+"/día":"Por día · $"+emp.salDiario+"/día"}</div>
               </div>
-              <input type="number" value={val||""} onChange={e=>{const v=parseInt(e.target.value)||null;setOverrides(p=>({...p,[k]:{...p[k],pagoFijo:v}}));}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.green,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+              <input type="number" value={localInputs["sal|"+k]!==undefined?localInputs["sal|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["sal|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseInt(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],pagoFijo:v}}));setLocalInputs(p=>{const n={...p};delete n["sal|"+k];return n;});}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.green,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
             </div>
           );
         })}
@@ -484,7 +507,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
                 <div style={{fontSize:8,color:C.ink4}}>Prog: {emp.hrsProg}h · Drive: {base}h</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <input type="number" min="0" value={val==null?"":val} onChange={e=>{const v=e.target.value===""?null:(parseInt(e.target.value)||0);setOverrides(p=>({...p,[k]:{...p[k],horasReales:v}}));}} style={{width:64,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.blue,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+                <input type="number" min="0" value={localInputs["hrs|"+k]!==undefined?localInputs["hrs|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["hrs|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseInt(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],horasReales:v}}));setLocalInputs(p=>{const n={...p};delete n["hrs|"+k];return n;});}} style={{width:64,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.blue,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
                 <span style={{fontSize:9,color:C.ink4}}>h</span>
               </div>
             </div>
@@ -503,12 +526,16 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
                 <div style={{fontSize:8,color:C.ink4}}>Drive: {base} días · ${emp.salDiario}/día</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <input type="number" min="0" max="7" value={val==null?"":val} onChange={e=>{const v=e.target.value===""?null:(parseInt(e.target.value)||0);setOverrides(p=>({...p,[k]:{...p[k],diasAsistidos:v}}));}} style={{width:52,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.amber,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+                <input type="number" min="0" max="7" value={localInputs["dia|"+k]!==undefined?localInputs["dia|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["dia|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseInt(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],diasAsistidos:v}}));setLocalInputs(p=>{const n={...p};delete n["dia|"+k];return n;});}} style={{width:52,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.amber,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
                 <span style={{fontSize:9,color:C.ink4}}>días</span>
               </div>
             </div>
           );
         })}
+        {tabEdit==="dias"&&<div style={{marginTop:12,display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
+          <button onClick={guardarDias} disabled={guardando} style={{padding:"7px 16px",background:C.amber+"22",border:"1px solid "+C.amber,borderRadius:6,color:C.amber,fontSize:11,fontWeight:700,cursor:"pointer"}}>{guardando?"Guardando...":"💾 Guardar días en BD"}</button>
+          {guardMsg&&<div style={{fontSize:9,color:guardMsg.startsWith("Error")?C.red:C.green}}>{guardMsg}</div>}
+        </div>}
         {tabEdit==="propinas"&&todosMeseros.map((m,i)=>{
           const k=m.nombre?.toLowerCase();
           const sp=src.find(p=>p.nombre?.toLowerCase()===k);
@@ -521,7 +548,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
                 <div style={{fontSize:11,fontWeight:600}}>{m.nombre}</div>
                 <div style={{fontSize:8,color:C.ink4}}>Drive: {mxnD(base)} · bruto (sin −8%)</div>
               </div>
-              <input type="number" value={val||""} onChange={e=>{const v=parseFloat(e.target.value)||null;setOverrides(p=>({...p,[k]:{...p[k],propina:v}}));}} style={{width:96,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.teal,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+              <input type="number" value={localInputs["pro|"+k]!==undefined?localInputs["pro|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["pro|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseFloat(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],propina:v}}));setLocalInputs(p=>{const n={...p};delete n["pro|"+k];return n;});}} style={{width:96,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.teal,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
             </div>
           );
         })}
@@ -531,7 +558,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,onClose}){
 }
 
 // ── TAB NÓMINA ────────────────────────────────────────────────────────────────
-function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp}){
+function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,loadData}){
   const rows=calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
   const ts=rows.reduce((a,r)=>a+r.sueldo,0);
   const tm=rows.reduce((a,r)=>a+r.moche,0);
@@ -542,7 +569,7 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
   const save=(n,m)=>fetch(API+"/api/dashboard/comida",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({semana:semana.key,nombre:n,monto:m})});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      {showSal&&<ModalEditar overrides={overrides} setOverrides={setOverrides} data={data} ventasProp={ventasProp} onClose={()=>setShowSal(false)}/>}
+      {showSal&&<ModalEditar overrides={overrides} setOverrides={setOverrides} data={data} ventasProp={ventasProp} semana={semana} loadData={loadData} onClose={()=>setShowSal(false)}/>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         <KPI label="Sueldos brutos" value={mxn(ts)} color={C.purple}/>
         <KPI label="Comida deducida" value={tcm>0?"("+mxn(tcm)+")":"$0"} color={C.red}/>
