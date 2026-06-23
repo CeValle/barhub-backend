@@ -86,7 +86,7 @@ function getSemanaOffset(base,offset){
 // ── CÁLCULO NÓMINA ───────────────────────────────────────────────────────────
 function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
   const mocheMap={},propMap={};
-  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();mocheMap[k]=(m.venta||0)*PCT_MOCHE;});
+  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();const ovM=(overrides||{})[k]?.moche;mocheMap[k]=ovM!=null?ovM:(m.venta||0)*PCT_MOCHE;});
   const src=ventasProp&&ventasProp.length?ventasProp:ventas;
   (src||[]).forEach(m=>{
     const k=m.nombre?.toLowerCase();
@@ -569,6 +569,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,semana,loadData,onC
 
 // ── TAB NÓMINA ────────────────────────────────────────────────────────────────
 function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,loadData}){
+  const [localMoche,setLocalMoche]=useState({});
   const rows=calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
   const ts=rows.reduce((a,r)=>a+r.sueldo,0);
   const tm=rows.reduce((a,r)=>a+r.moche,0);
@@ -595,7 +596,11 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
                 <td style={{padding:"9px 10px"}}><Badge label={r.area} color={col} bg={col+"15"}/></td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink3}}>{r.dias||"—"}</td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink2}}>{r.sueldo>0?mxn(r.sueldo):"—"}</td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:r.moche>0?C.red:C.ink4}}>{r.moche>0?"("+mxnD(r.moche)+")":"-"}</td>
+                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace"}}>
+                  {(r.moche>0||(overrides||{})[r.nombre.toLowerCase()]?.moche!=null)
+                    ?<input type="number" value={localMoche[r.nombre.toLowerCase()]!==undefined?localMoche[r.nombre.toLowerCase()]:r.moche} onChange={e=>setLocalMoche(p=>({...p,[r.nombre.toLowerCase()]:e.target.value}))} onBlur={e=>{const k=r.nombre.toLowerCase();const raw=e.target.value;const v=raw===""?null:(parseFloat(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],moche:v}}));setLocalMoche(p=>{const n={...p};delete n[k];return n;});}} style={{width:76,padding:"3px 6px",background:C.s3,border:"1px solid "+C.border,borderRadius:5,color:C.red,fontSize:11,fontFamily:"monospace",textAlign:"right"}}/>
+                    :<span style={{color:C.ink4}}>-</span>}
+                </td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:r.propTarjeta>0?C.teal:C.ink4}}>{r.propTarjeta>0?mxnD(r.propTarjeta):"-"}</td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:r.propPiso>0?C.blue:C.ink4}}>{r.propPiso>0?mxnD(r.propPiso):"-"}</td>
                 <td style={{padding:"9px 10px",textAlign:"right"}}>
@@ -623,7 +628,7 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
 // ── TAB PROPINAS ──────────────────────────────────────────────────────────────
 function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
   const ventasActual=data.ventas||[];
-  const tm=ventasActual.reduce((a,m)=>a+(m.venta||0),0)*PCT_MOCHE;
+  const tm=ventasActual.reduce((a,m)=>{const k=m.nombre?.toLowerCase();const ovM=(overrides||{})[k]?.moche;return a+(ovM!=null?ovM:(m.venta||0)*PCT_MOCHE);},0);
   const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
   const srcEff=src.map(m=>{const k=m.nombre?.toLowerCase();const ov=(overrides||{})[k]?.propina;return ov!=null?{...m,propina:ov,prop_tarjeta:ov}:m;});
   const tt=srcEff.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0);
