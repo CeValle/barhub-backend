@@ -97,13 +97,19 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
   Object.entries(overrides||{}).forEach(([k,ov])=>{if(ov.propina!=null&&propMap[k]==null)propMap[k]=ov.propina*(1-PCT_TERM);});
   const totalMoche=Object.values(mocheMap).reduce((a,v)=>a+v,0);
   const pisoMap={};
+  const pisoHe={};
   PISO.forEach(p=>{
     const k=p.nombre.toLowerCase();
     const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===p.nombre.toLowerCase());
     const ovHb=(overrides||{})[k]?.horasReales;
     const hb=ovHb!=null?ovHb:(a?(a.horas_reales||0):0);
     const he=(p.hrsProg>0&&hb>=p.hrsProg*.9)?p.hrsProg:hb;
-    pisoMap[k]=p.hrsProg>0?((p.hrsProg/TOTAL_HRS)*totalMoche)*(he/p.hrsProg):0;
+    pisoHe[k]=he;
+  });
+  const totalHrsEf=Object.values(pisoHe).reduce((a,v)=>a+v,0);
+  PISO.forEach(p=>{
+    const k=p.nombre.toLowerCase();
+    pisoMap[k]=totalHrsEf>0?(pisoHe[k]/totalHrsEf)*totalMoche:0;
   });
   return EMPLEADOS_BASE.map(emp=>{
     const k=emp.nombre.toLowerCase();

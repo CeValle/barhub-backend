@@ -43,25 +43,23 @@ router.get("/:semana", async (req, res) => {
     // Total moche a repartir a piso
     const totalMoche = (ventas || []).reduce((a,v) => a + v.venta * PCT_MOCHE, 0);
 
-    // Reparto a piso — Filosofía B
-    const reparto = PISO.map(p => {
-      const asist  = asistencias?.find(a => a.nombre.toLowerCase() === p.nombre.toLowerCase());
+    // Reparto a piso — distribución completa (sin sobrante)
+    const repartoBase = PISO.map(p => {
+      const asist   = asistencias?.find(a => a.nombre.toLowerCase() === p.nombre.toLowerCase());
       // flexible (comodín): sin registro = no asistió → 0h; regular: sin registro = asistencia completa
       const hrsReal = p.flexible ? (asist?.horas_reales || 0) : (asist?.horas_reales || p.hrsProg);
-      const cuota  = TOTAL_HRS_PROG > 0 ? (p.hrsProg / TOTAL_HRS_PROG) * totalMoche : 0;
-      const ajuste = p.hrsProg > 0 ? cuota * (hrsReal / p.hrsProg) : 0;
-      return {
-        nombre:   p.nombre,
-        area:     p.area,
-        hrsProg:  p.hrsProg,
-        hrsReal,
-        cuota,
-        ajuste,
-        perdido:  cuota - ajuste,
-      };
+      return { ...p, hrsReal };
     });
-    const totalRepartido = reparto.reduce((a,p) => a + p.ajuste, 0);
-    const sobrante       = totalMoche - totalRepartido;
+    const totalHrsReales = repartoBase.reduce((a, p) => a + p.hrsReal, 0);
+    const reparto = repartoBase.map(p => ({
+      nombre:  p.nombre,
+      area:    p.area,
+      hrsProg: p.hrsProg,
+      hrsReal: p.hrsReal,
+      ajuste:  totalHrsReales > 0 ? (p.hrsReal / totalHrsReales) * totalMoche : 0,
+    }));
+    const totalRepartido = reparto.reduce((a, p) => a + p.ajuste, 0);
+    const sobrante       = 0;
 
     res.json({
       ok: true,
