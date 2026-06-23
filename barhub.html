@@ -86,7 +86,7 @@ function getSemanaOffset(base,offset){
 // ── CÁLCULO NÓMINA ───────────────────────────────────────────────────────────
 function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
   const mocheMap={},propMap={};
-  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();mocheMap[k]=(m.venta||0)*PCT_MOCHE;});
+  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();const ovM=(overrides||{})[k]?.moche;mocheMap[k]=ovM!=null?ovM:(m.venta||0)*PCT_MOCHE;});
   const src=ventasProp&&ventasProp.length?ventasProp:ventas;
   (src||[]).forEach(m=>{
     const k=m.nombre?.toLowerCase();
@@ -472,6 +472,7 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,semana,loadData,onC
     {id:"horas",   label:"Horas",   icon:"⏱"},
     {id:"dias",    label:"Días",    icon:"📅"},
     {id:"propinas",label:"Propinas",icon:"✦"},
+    {id:"moche",   label:"Moche",   icon:"💸"},
   ];
   return(
     <div style={{position:"fixed",inset:0,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
@@ -562,6 +563,21 @@ function ModalEditar({overrides,setOverrides,data,ventasProp,semana,loadData,onC
             </div>
           );
         })}
+        {tabEdit==="moche"&&(data.ventas||[]).map((m,i)=>{
+          const k=m.nombre?.toLowerCase();
+          const defaultMoche=Math.round((m.venta||0)*PCT_MOCHE);
+          const val=(overrides||{})[k]?.moche??defaultMoche;
+          return(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
+              <Av n={m.nombre} c={C.red} size={28}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600}}>{m.nombre}</div>
+                <div style={{fontSize:8,color:C.ink4}}>Venta: {mxnD(m.venta||0)} · 4.5% = {mxnD(defaultMoche)}</div>
+              </div>
+              <input type="number" value={localInputs["moc|"+k]!==undefined?localInputs["moc|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["moc|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseFloat(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],moche:v}}));setLocalInputs(p=>{const n={...p};delete n["moc|"+k];return n;});}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.red,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -623,7 +639,7 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
 // ── TAB PROPINAS ──────────────────────────────────────────────────────────────
 function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
   const ventasActual=data.ventas||[];
-  const tm=ventasActual.reduce((a,m)=>a+(m.venta||0),0)*PCT_MOCHE;
+  const tm=ventasActual.reduce((a,m)=>{const k=m.nombre?.toLowerCase();const ovM=(overrides||{})[k]?.moche;return a+(ovM!=null?ovM:(m.venta||0)*PCT_MOCHE);},0);
   const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
   const srcEff=src.map(m=>{const k=m.nombre?.toLowerCase();const ov=(overrides||{})[k]?.propina;return ov!=null?{...m,propina:ov,prop_tarjeta:ov}:m;});
   const tt=srcEff.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0);
