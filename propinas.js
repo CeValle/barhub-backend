@@ -9,7 +9,7 @@ const PCT_TERMINAL = 0.08;
 const PISO = [
   { nombre:"Yulisa", area:"Caja",   hrsProg:20 },
   { nombre:"Omar",   area:"Barra",   hrsProg:20 },
-  { nombre:"Erick",  area:"Comodín", hrsProg:46 },
+  { nombre:"Erick",  area:"Comodín", hrsProg:20, flexible:true },
   { nombre:"Edith",  area:"Cocina",  hrsProg:46 },
   { nombre:"Jorge",  area:"Cocina", hrsProg:46 },
 ];
@@ -46,7 +46,8 @@ router.get("/:semana", async (req, res) => {
     // Reparto a piso — Filosofía B
     const reparto = PISO.map(p => {
       const asist  = asistencias?.find(a => a.nombre.toLowerCase() === p.nombre.toLowerCase());
-      const hrsReal = asist?.horas_reales || p.hrsProg; // default: asistencia completa
+      // flexible (comodín): sin registro = no asistió → 0h; regular: sin registro = asistencia completa
+      const hrsReal = p.flexible ? (asist?.horas_reales || 0) : (asist?.horas_reales || p.hrsProg);
       const cuota  = TOTAL_HRS_PROG > 0 ? (p.hrsProg / TOTAL_HRS_PROG) * totalMoche : 0;
       const ajuste = p.hrsProg > 0 ? cuota * (hrsReal / p.hrsProg) : 0;
       return {
