@@ -47,7 +47,7 @@ const EMPLEADOS_BASE=[
   {nombre:"Chino",  area:"Mesero",  dept:"bar",   salDiario:214, hrsProg:10,pagoFijo:1500,adminFijo:false},
   {nombre:"Edith",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
   {nombre:"Jorge",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Erick",  area:"Comodín", dept:"bar",   salDiario:500, hrsProg:46,pagoFijo:null,adminFijo:false},
+  {nombre:"Erick",  area:"Comodín", dept:"bar",   salDiario:500, hrsProg:20,pagoFijo:null,adminFijo:false},
   {nombre:"Andrea", area:"Admin",   dept:"admin", salDiario:800, hrsProg:46,pagoFijo:4000,adminFijo:true},
   {nombre:"Gerardo",area:"Admin",   dept:"admin", salDiario:1200,hrsProg:46,pagoFijo:6000,adminFijo:true},
 ];
@@ -115,13 +115,15 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
     const k=emp.nombre.toLowerCase();
     const pf=(overrides||{})[k]?.pagoFijo??emp.pagoFijo;
     const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
-    const enDoc=emp.adminFijo||!!a;
     const ovHb=(overrides||{})[k]?.horasReales;
+    const ovDias=(overrides||{})[k]?.diasAsistidos;
+    // enDoc: override de días/horas cuenta igual que aparecer en el PDF
+    const enDoc=emp.adminFijo||!!a||(ovDias!=null&&ovDias>0)||(ovHb!=null&&ovHb>0);
     const hb=(enDoc&&!emp.adminFijo)?(ovHb!=null?ovHb:(a?.horas_reales||0)):0;
     const hp=emp.hrsProg||0;
-    const completo=emp.adminFijo||(hp>0&&hb>=hp*.9);
-    const ovDias=(overrides||{})[k]?.diasAsistidos;
     const dias=emp.adminFijo?5:(ovDias!=null?ovDias:(a?.dias_asistidos||0));
+    // completo: si el usuario editó días manualmente usamos dias>=5; si vino de Drive usamos horas
+    const completo=emp.adminFijo||(ovDias!=null?(dias>=5):(hp>0&&hb>=hp*.9));
     let sueldo=0;
     if(!enDoc&&!emp.adminFijo)sueldo=0;
     else if(pf!=null)sueldo=(emp.adminFijo||completo)?pf:Math.round((pf/7)*dias);
