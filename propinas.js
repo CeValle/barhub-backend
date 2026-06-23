@@ -3,6 +3,7 @@ const { supabase } = require("./supabase");
 
 const PCT_MOCHE    = 0.045;
 const PCT_TERMINAL = 0.08;
+const SIN_MOCHE    = ["mesero de prueba"];
 
 // Empleados de piso que RECIBEN reparto (Filosofía B)
 // NO incluye Angel, Saul, ni Gerente (ellos pagan el moche)
@@ -37,11 +38,14 @@ router.get("/:semana", async (req, res) => {
       propBruta:    v.prop_tarjeta,
       comision8pct: v.prop_tarjeta * PCT_TERMINAL,
       propNeta:     v.prop_tarjeta * (1 - PCT_TERMINAL),
-      moche:        v.venta * PCT_MOCHE,
+      moche:        SIN_MOCHE.includes(v.nombre?.toLowerCase()) ? 0 : v.venta * PCT_MOCHE,
     }));
 
-    // Total moche a repartir a piso
-    const totalMoche = (ventas || []).reduce((a,v) => a + v.venta * PCT_MOCHE, 0);
+    // Total moche a repartir a piso (excluye meseros de prueba)
+    const totalMoche = (ventas || []).reduce((a,v) => {
+      if (SIN_MOCHE.includes(v.nombre?.toLowerCase())) return a;
+      return a + v.venta * PCT_MOCHE;
+    }, 0);
 
     // Reparto a piso — distribución completa (sin sobrante)
     const repartoBase = PISO.map(p => {
