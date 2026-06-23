@@ -658,7 +658,8 @@ function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
           <TH cols={["Mesero","Venta actual","Moche","PROPINA sem ant","−8%","Neto"]}/>
           <tbody>
             {todos.map((m,i)=>{
-              const mc=(m.venta||0)*PCT_MOCHE;
+              const _ovMc=(overrides||{})[m.nombre?.toLowerCase()]?.moche;
+              const mc=_ovMc!=null?_ovMc:(m.venta||0)*PCT_MOCHE;
               const mp=srcEff.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
               const pr=mp?.propina??mp?.prop_tarjeta??0;
               const co=pr*PCT_TERM,ne=pr-co;
