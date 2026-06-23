@@ -60,6 +60,7 @@ const PISO=[
 ];
 const TOTAL_HRS=PISO.reduce((a,p)=>a+p.hrsProg,0);
 const PCT_MOCHE=0.045,PCT_TERM=0.08;
+const SIN_MOCHE=["mesero de prueba"];
 
 const MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -86,7 +87,7 @@ function getSemanaOffset(base,offset){
 // ── CÁLCULO NÓMINA ───────────────────────────────────────────────────────────
 function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
   const mocheMap={},propMap={};
-  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();const ovM=(overrides||{})[k]?.moche;mocheMap[k]=ovM!=null?ovM:(m.venta||0)*PCT_MOCHE;});
+  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();if(SIN_MOCHE.some(n=>k===n))return;const ovM=(overrides||{})[k]?.moche;mocheMap[k]=ovM!=null?ovM:(m.venta||0)*PCT_MOCHE;});
   const src=ventasProp&&ventasProp.length?ventasProp:ventas;
   (src||[]).forEach(m=>{
     const k=m.nombre?.toLowerCase();
@@ -628,7 +629,7 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
 // ── TAB PROPINAS ──────────────────────────────────────────────────────────────
 function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
   const ventasActual=data.ventas||[];
-  const tm=ventasActual.reduce((a,m)=>{const k=m.nombre?.toLowerCase();const ovM=(overrides||{})[k]?.moche;return a+(ovM!=null?ovM:(m.venta||0)*PCT_MOCHE);},0);
+  const tm=ventasActual.reduce((a,m)=>{const k=m.nombre?.toLowerCase();if(SIN_MOCHE.some(n=>k===n))return a;const ovM=(overrides||{})[k]?.moche;return a+(ovM!=null?ovM:(m.venta||0)*PCT_MOCHE);},0);
   const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
   const srcEff=src.map(m=>{const k=m.nombre?.toLowerCase();const ov=(overrides||{})[k]?.propina;return ov!=null?{...m,propina:ov,prop_tarjeta:ov}:m;});
   const tt=srcEff.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0);
@@ -658,8 +659,9 @@ function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
           <TH cols={["Mesero","Venta actual","Moche","PROPINA sem ant","−8%","Neto"]}/>
           <tbody>
             {todos.map((m,i)=>{
-              const _ovMc=(overrides||{})[m.nombre?.toLowerCase()]?.moche;
-              const mc=_ovMc!=null?_ovMc:(m.venta||0)*PCT_MOCHE;
+              const _sinMoche=SIN_MOCHE.some(n=>m.nombre?.toLowerCase()===n);
+              const _ovMc=_sinMoche?null:(overrides||{})[m.nombre?.toLowerCase()]?.moche;
+              const mc=_sinMoche?0:(_ovMc!=null?_ovMc:(m.venta||0)*PCT_MOCHE);
               const mp=srcEff.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
               const pr=mp?.propina??mp?.prop_tarjeta??0;
               const co=pr*PCT_TERM,ne=pr-co;
