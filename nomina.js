@@ -7,8 +7,7 @@ const PCT_TERMINAL = 0.08;
 // Empleados base con sueldos diarios reales (AbrilSem2(26))
 const EMPLEADOS = [
   { nombre:"Yulisa",  puesto:"Cajero",  area:"Caja",    salDiario:1000, hrsProg:20 },
-  { nombre:"Alexis",  puesto:"Barra",   area:"Barra",   salDiario:700,  hrsProg:46 },
-  { nombre:"Omar",    puesto:"Barra",   area:"Barra",   salDiario:750,  hrsProg:20 },
+  { nombre:"Omar",    puesto:"Barra",   area:"Barra",   salDiario:950,  hrsProg:20 },
   { nombre:"Angel",   puesto:"Mesero",  area:"Mesero",  salDiario:560,  hrsProg:0  },
   { nombre:"Saul",    puesto:"Mesero",  area:"Mesero",  salDiario:750,  hrsProg:0  },
   { nombre:"Edith",   puesto:"Cocina",  area:"Cocina",  salDiario:680,  hrsProg:46 },

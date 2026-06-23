@@ -8,7 +8,6 @@ const PCT_TERMINAL = 0.08;
 // NO incluye Angel, Saul, ni Gerente (ellos pagan el moche)
 const PISO = [
   { nombre:"Yulisa", area:"Caja",   hrsProg:20 },
-  { nombre:"Alexis", area:"Barra",  hrsProg:46 },
   { nombre:"Omar",   area:"Barra",  hrsProg:20 },
   { nombre:"Edith",  area:"Cocina", hrsProg:46 },
   { nombre:"Jorge",  area:"Cocina", hrsProg:46 },
