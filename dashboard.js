@@ -166,6 +166,23 @@ router.post("/comida", async (req, res) => {
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+router.post("/asistencia", async (req, res) => {
+  try {
+    const { semana, nombre, dias_asistidos, horas_reales } = req.body;
+    if (!semana || !nombre) return res.status(400).json({ok:false, error:"Faltan campos"});
+    await supabase.from("asistencias").delete().eq("semana", semana).eq("nombre", nombre);
+    const { error } = await supabase.from("asistencias").insert({
+      semana, nombre,
+      dias_asistidos: dias_asistidos||0,
+      horas_reales:   horas_reales||0,
+      updated_at:     new Date().toISOString()
+    });
+    if (error) throw error;
+    invalidarSemanas();
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 router.get("/asistencias-anio", async (req, res) => {
   try {
     const anio = req.query.anio || new Date().getFullYear();
