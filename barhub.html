@@ -113,12 +113,13 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
   });
   return EMPLEADOS_BASE.map(emp=>{
     const k=emp.nombre.toLowerCase();
-    const pf=(overrides||{})[k]?.pagoFijo??emp.pagoFijo;
+    const ovPf=(overrides||{})[k]?.pagoFijo;
+    const pf=ovPf??emp.pagoFijo;
     const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
     const ovHb=(overrides||{})[k]?.horasReales;
     const ovDias=(overrides||{})[k]?.diasAsistidos;
-    // enDoc: override de días/horas cuenta igual que aparecer en el PDF
-    const enDoc=emp.adminFijo||!!a||(ovDias!=null&&ovDias>0)||(ovHb!=null&&ovHb>0);
+    // enDoc: override de días/horas/salario cuenta igual que aparecer en el PDF
+    const enDoc=emp.adminFijo||!!a||(ovDias!=null&&ovDias>0)||(ovHb!=null&&ovHb>0)||(ovPf!=null&&ovPf>0);
     const hb=(enDoc&&!emp.adminFijo)?(ovHb!=null?ovHb:(a?.horas_reales||0)):0;
     const hp=emp.hrsProg||0;
     const dias=emp.adminFijo?5:(ovDias!=null?ovDias:(a?.dias_asistidos||0));
@@ -126,6 +127,7 @@ function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
     const completo=emp.adminFijo||(ovDias!=null?(dias>=5):(hp>0&&hb>=hp*.9));
     let sueldo=0;
     if(!enDoc&&!emp.adminFijo)sueldo=0;
+    else if(ovPf!=null)sueldo=ovPf;
     else if(pf!=null)sueldo=(emp.adminFijo||completo)?pf:Math.round((pf/7)*dias);
     else sueldo=emp.salDiario*dias;
     const moche=mocheMap[k]||0,pt=propMap[k]||0,pp=pisoMap[k]||0,cm=(comidaMap||{})[k]||0;
