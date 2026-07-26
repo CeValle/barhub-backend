@@ -21,6 +21,14 @@ function extraerFechas(nombreLimpio) {
     if (mes) return { d1:+m[1], m1:mes, d2:+m[2], m2:mes, año:+m[4] };
   }
 
+  // "2226 de julio 2026" (rango de días pegado, sin separador — exportado
+  // así por quien nombra/sube el archivo, en vez de "22-26")
+  m = n.match(/^(\d{2})(\d{2})\s+(?:de\s+)?(\w+)\s+(\d{4})/i);
+  if (m) {
+    const mes = MESES[m[3].toLowerCase()];
+    if (mes) return { d1:+m[1], m1:mes, d2:+m[2], m2:mes, año:+m[4] };
+  }
+
   // "29 de abril - 3 de mayo 2026"
   m = n.match(/^(\d{1,2})\s+de\s+(\w+)\s*[-–]\s*(\d{1,2})\s+de\s+(\w+)\s+(\d{4})/i);
   if (m) {
@@ -39,9 +47,13 @@ function extraerFechas(nombreLimpio) {
 }
 
 // Nombres de "Ventas/mesero ..." y "Asistencias ..."
+// El separador entre "venta(s)" y "mesero" varía según quien nombra el
+// archivo: "Ventas/mesero", "ventas mesero", o pegado "ventamesero" — y los
+// espacios a veces llegan como guion bajo (nombres tipo slug).
 function parsearNombre(nombre) {
   const n = nombre.replace(/\.pdf$/i,"")
-    .replace(/^ventas\/mesero\s*/i,"")
+    .replace(/_/g," ")
+    .replace(/^ventas?[\s/]*mesero\s*/i,"")
     .replace(/^asistencias\s*/i,"")
     .replace(/^ventas?\s+por\s+grupo\s*/i,"").trim();
   return extraerFechas(n);
