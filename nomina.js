@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const { supabase } = require("./supabase");
-const { calcNomina } = require("./nominaCalc");
+const { calcNomina, usaLogicaNuevaPropinas } = require("./nominaCalc");
 const { ventasDeSelector, propinasDeVentas } = require("./semanaUtils");
 
 // Reúne todos los datos de una semana (selector DOM-SAB) y corre el motor de cálculo.
@@ -26,9 +26,10 @@ async function getNominaSemana(semanaSelector) {
   const ventas      = ventasRes.data    || [];
   const ventasProp  = ventasPropRes.data|| [];
 
-  const rows = calcNomina({ empleados, asistencias, ventas, ventasProp, overrides });
+  const rows = calcNomina({ empleados, asistencias, ventas, ventasProp, overrides, semanaVentas });
+  const logicaNueva = usaLogicaNuevaPropinas(semanaVentas);
 
-  return { rows, empleados, asistencias, ventas, ventasProp, semana: semanaSelector, semanaVentas, semanaPropinas };
+  return { rows, empleados, asistencias, ventas, ventasProp, semana: semanaSelector, semanaVentas, semanaPropinas, logicaNueva };
 }
 
 // Persiste una edición de cualquier campo para un empleado en una semana.

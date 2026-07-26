@@ -5,7 +5,7 @@ const { getNominaSemana, applyEdit } = require("./nomina");
 router.get("/:semana", async (req, res) => {
   try {
     const { semana } = req.params;
-    const { rows, ventas, semanaVentas, semanaPropinas } = await getNominaSemana(semana);
+    const { rows, ventas, semanaVentas, semanaPropinas, logicaNueva } = await getNominaSemana(semana);
 
     // Propinas por tarjeta: todo empleado con venta registrada esa semana (meseros,
     // pero también cualquiera que haya facturado), con moche y propina ya calculados.
@@ -30,7 +30,7 @@ router.get("/:semana", async (req, res) => {
     const totalRepartido  = piso.reduce((a, r) => a + (r.ajuste || 0), 0);
 
     res.json({
-      ok: true, semana, semanaVentas, semanaPropinas,
+      ok: true, semana, semanaVentas, semanaPropinas, logicaNueva,
       propTarjeta,
       reparto: { totalMoche, totalRepartido, sobrante: totalMoche - totalRepartido, empleados: piso },
     });
@@ -44,10 +44,10 @@ router.put("/:semana/:nombre", async (req, res) => {
   try {
     const { semana, nombre } = req.params;
     await applyEdit(semana, nombre, req.body);
-    const { rows, semanaVentas, semanaPropinas } = await getNominaSemana(semana);
+    const { rows, semanaVentas, semanaPropinas, logicaNueva } = await getNominaSemana(semana);
     const nombre_key = nombre.toLowerCase().trim();
     const fila = rows.find(r => r.nombre.toLowerCase().trim() === nombre_key) || null;
-    res.json({ ok: true, semana, semanaVentas, semanaPropinas, row: fila });
+    res.json({ ok: true, semana, semanaVentas, semanaPropinas, logicaNueva, row: fila });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
