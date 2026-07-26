@@ -2,44 +2,9 @@ const express    = require("express");
 const router     = express.Router();
 const { google } = require("googleapis");
 const Anthropic  = require("@anthropic-ai/sdk");
+const { parsearNombreDetallado, toSemanaKey } = require("./semanaUtils");
 
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const MESES = {
-  enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
-  julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
-};
-const PAD = n => String(n).padStart(2,"0");
-
-function parsearNombreDetallado(nombre) {
-  const n = nombre
-    .replace(/\.pdf$/i,"")
-    .replace(/^ventas?\s+por\s+grupo\s+detallado?\s*/i,"")
-    .replace(/^venta\s+por\s+grupo\s+detallado?\s*/i,"")
-    .trim();
-
-  let m = n.match(/^(\d{1,2})-(\d{1,2})\s+(?:de\s+)?(\w+)\s+(\d{4})/i);
-  if (m) {
-    const mes = MESES[m[3].toLowerCase()];
-    if (mes) return { d1:+m[1], m1:mes, d2:+m[2], m2:mes, año:+m[4] };
-  }
-  m = n.match(/^(\d{1,2})\s+de\s+(\w+)\s*[-–]\s*(\d{1,2})\s+de\s+(\w+)\s+(\d{4})/i);
-  if (m) {
-    const m1 = MESES[m[2].toLowerCase()], m2 = MESES[m[4].toLowerCase()];
-    if (m1 && m2) return { d1:+m[1], m1, d2:+m[3], m2, año:+m[5] };
-  }
-  m = n.match(/^(\d{1,2})\s+(\w+)\s*[-–]\s*(\d{1,2})\s+(\w+)\s+(\d{4})/i);
-  if (m) {
-    const m1 = MESES[m[2].toLowerCase()], m2 = MESES[m[4].toLowerCase()];
-    if (m1 && m2) return { d1:+m[1], m1, d2:+m[3], m2, año:+m[5] };
-  }
-  return null;
-}
-
-function toSemanaKey(p) {
-  if (!p) return null;
-  return `${p.año}-${PAD(p.m1)}-${PAD(p.d1)}_a_${p.año}-${PAD(p.m2)}-${PAD(p.d2)}`;
-}
 
 function getDriveClient() {
   const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
