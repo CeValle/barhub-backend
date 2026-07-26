@@ -1,8 +1,13 @@
 const router = require("express").Router();
 const { supabase } = require("./supabase");
-
-const PAD = n => String(n).padStart(2,"0");
-const FMT = d => `${d.getFullYear()}-${PAD(d.getMonth()+1)}-${PAD(d.getDate())}`;
+const {
+  PAD, FMT,
+  calcularSemanaActual,
+  ventasDeSelector,
+  propinasDeVentas,
+  semanaProxima,
+} = require("./semanaUtils");
+const { getNominaSemana, applyEdit } = require("./nomina");
 
 // ── Caché en memoria — lista de semanas disponibles (TTL 5 min) ───────────────
 const _semsCache = { data: null, ts: 0 };
@@ -26,38 +31,6 @@ async function getSemsDisponibles(invalidar = false) {
   _semsCache.data = result;
   _semsCache.ts   = ahora;
   return result;
-}
-
-// Semana DOM-SAB actual
-function calcularSemanaActual() {
-  const hoy = new Date(), dow = hoy.getDay(), d = dow === 0 ? 0 : dow;
-  const dom = new Date(hoy); dom.setDate(hoy.getDate() - d);
-  const sab = new Date(dom); sab.setDate(dom.getDate() + 6);
-  return `${FMT(dom)}_a_${FMT(sab)}`;
-}
-
-// Selector DOM-SAB → semana WED-SUN de ventas (dom+3 a dom+7)
-function ventasDeSelector(selectorKey) {
-  const dom  = new Date(selectorKey.split("_a_")[0] + "T12:00:00");
-  const mier = new Date(dom); mier.setDate(dom.getDate() + 3);
-  const sun  = new Date(dom); sun.setDate(dom.getDate() + 7);
-  return `${FMT(mier)}_a_${FMT(sun)}`;
-}
-
-// Propinas = semana WED-SUN exactamente anterior a la semana de ventas
-function propinasDeVentas(semanaVentas) {
-  const ini  = new Date(semanaVentas.split("_a_")[0] + "T12:00:00");
-  const pIni = new Date(ini); pIni.setDate(ini.getDate() - 7);
-  const pFin = new Date(pIni); pFin.setDate(pIni.getDate() + 4);
-  return `${FMT(pIni)}_a_${FMT(pFin)}`;
-}
-
-// Fallback: semana más reciente cuyo fin <= fin del target (solo para asistencias)
-function semanaProxima(target, disponibles) {
-  if (!disponibles?.length) return null;
-  const finT = new Date(target.split("_a_")[1] + "T23:59:59");
-  const cands = disponibles.filter(s => new Date(s.split("_a_")[1] + "T23:59:59") <= finT);
-  return cands.length ? cands[cands.length - 1] : disponibles[disponibles.length - 1];
 }
 
 // GET /api/dashboard/semana-actual?semana=YYYY-MM-DD_a_YYYY-MM-DD
@@ -99,7 +72,10 @@ router.get("/semana-actual", async (req, res) => {
     const selMes   = selDate.getMonth() + 1;
 
     // ── Fetch paralelo con semanas calculadas ─────────────────────────────
-    const [asistRes, vmAct, vmProp, vgRes, nominaRes, comidaRes, comprasRes, gastosRes] = await Promise.all([
+    // Nómina/propinas ya no viven aquí — ver /api/nomina y /api/propinas.
+    // `comidaRes` es compat con la UI actual (lee el override de comida guardado
+    // en nomina_semanal para pintar comidaMap; ver POST /comida más abajo).
+    const [asistRes, vmAct, vmProp, vgRes, comprasRes, gastosRes, comidaRes] = await Promise.all([
       semanaAsist
         ? supabase.from("asistencias").select("*").eq("semana", semanaAsist)
         : Promise.resolve({ data: [] }),
@@ -112,14 +88,11 @@ router.get("/semana-actual", async (req, res) => {
       semanaGrupos
         ? supabase.from("ventas_grupo").select("*").eq("semana", semanaGrupos)
         : Promise.resolve({ data: [] }),
-      semanaAsist
-        ? supabase.from("nomina_semanal").select("*").eq("semana", semanaAsist)
-        : Promise.resolve({ data: [] }),
-      semanaAsist
-        ? supabase.from("comida").select("*").eq("semana", semanaAsist)
-        : Promise.resolve({ data: [] }),
       supabase.from("compras").select("*").eq("semana", semana).order("fecha"),
       supabase.from("gastos_fijos").select("*").eq("año", selAño).eq("mes", selMes).order("concepto"),
+      semanaAsist
+        ? supabase.from("nomina_semanal").select("nombre_key, comida").eq("semana", semanaAsist)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const grupos = vgRes.data || [];
@@ -140,11 +113,10 @@ router.get("/semana-actual", async (req, res) => {
       ventasMeseroPropinas: vmProp.data || [],
       ventasGrupo:          grupos,
       asistencias:          asistRes.data  || [],
-      nomina:               nominaRes.data || [],
-      comida:               comidaRes.data || [],
       compras:              comprasRes.data || [],
       gastosFijos:          gastosRes.data  || [],
       gastosMes:            { año: selAño, mes: selMes },
+      comida:               (comidaRes.data || []).map(r => ({ nombre: r.nombre_key, monto: r.comida })),
     });
 
   } catch(e) {
@@ -153,15 +125,56 @@ router.get("/semana-actual", async (req, res) => {
   }
 });
 
+// GET /api/dashboard/semanas-disponibles?anio=2026&mes=7
+// Todas las semanas (selector DOM-SAB) cuyo domingo cae en ese mes/año — misma
+// regla de pertenencia a mes usada en toda la app — con los rangos reales de
+// ventas/propinas ya resueltos, y si cada tipo de dato realmente tiene PDF sincronizado.
+router.get("/semanas-disponibles", async (req, res) => {
+  try {
+    const anio = +req.query.anio || new Date().getFullYear();
+    const mes  = +req.query.mes  || (new Date().getMonth() + 1);
+
+    const { semsA, semsM, semsG } = await getSemsDisponibles();
+
+    const semanas = [];
+    let d = new Date(anio, mes - 1, 1, 12, 0, 0);
+    while (d.getDay() !== 0) d.setDate(d.getDate() + 1); // primer domingo del mes
+    while (d.getMonth() === mes - 1 && d.getFullYear() === anio) {
+      const dom = new Date(d);
+      const sab = new Date(dom); sab.setDate(dom.getDate() + 6);
+      const selectorKey  = `${FMT(dom)}_a_${FMT(sab)}`;
+      const ventasKey    = ventasDeSelector(selectorKey);
+      const propinasKey  = propinasDeVentas(ventasKey);
+      const [vIni, vFin] = ventasKey.split("_a_");
+      const [pIni, pFin] = propinasKey.split("_a_");
+      semanas.push({
+        selectorKey,
+        domSab:        { inicio: FMT(dom), fin: FMT(sab) },
+        ventasWedSun:  { inicio: vIni, fin: vFin },
+        propinasWedSun:{ inicio: pIni, fin: pFin },
+        tieneAsistencias: semsA.includes(selectorKey),
+        tieneVentas:      semsM.includes(ventasKey),
+        tieneGrupos:      semsG.includes(ventasKey),
+      });
+      d.setDate(d.getDate() + 7);
+    }
+
+    res.json({ ok: true, anio, mes, semanas });
+  } catch(e) {
+    console.error("[SEMANAS-DISPONIBLES] Error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Compat: el frontend actual todavía guarda "comida" aquí (tabla `comida`,
+// ya eliminada). Redirige al override persistido en `nomina_semanal` para no
+// romper la UI en vivo mientras se actualiza el cliente para usar
+// PUT /api/nomina/:semana/:nombre directamente.
 router.post("/comida", async (req, res) => {
   try {
     const { semana, nombre, monto } = req.body;
     if (!semana || !nombre) return res.status(400).json({ ok:false, error:"Faltan campos" });
-    const { error } = await supabase.from("comida").upsert(
-      { semana, nombre, monto: monto||0, updated_at: new Date().toISOString() },
-      { onConflict: "semana,nombre" }
-    );
-    if (error) throw error;
+    await applyEdit(semana, nombre, { comida: monto || 0 });
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -226,27 +239,29 @@ router.get("/balance-mensual", async (req, res) => {
     const año = +req.query.año || new Date().getFullYear();
     const mes  = +req.query.mes  || (new Date().getMonth() + 1);
 
-    const semanas    = semanasEnMes(año, mes);
-    const ventasKeys   = semanas.map(s => s.ventasKey);
-    const selectorKeys = semanas.map(s => s.selectorKey);
+    const semanas      = semanasEnMes(año, mes);
+    const ventasKeys    = semanas.map(s => s.ventasKey);
+    const selectorKeys  = semanas.map(s => s.selectorKey);
 
-    const [vmRes, vgRes, asistRes, nomRes, cpRes, gfRes] = await Promise.all([
+    // getNominaSemana ya trae, por semana, el catálogo de empleados + asistencias +
+    // ventas + overrides corridos por el motor real (nominaCalc) — reemplaza la
+    // lectura directa de nomina_semanal (que ahora solo guarda overrides, no snapshots).
+    const [vmRes, vgRes, cpRes, gfRes, nominaPorSemana] = await Promise.all([
       supabase.from("ventas_mesero").select("*").in("semana", ventasKeys),
       supabase.from("ventas_grupo") .select("*").in("semana", ventasKeys),
-      supabase.from("asistencias")  .select("*").in("semana", selectorKeys),
-      supabase.from("nomina_semanal").select("*").in("semana", selectorKeys),
       supabase.from("compras")      .select("*").in("semana", selectorKeys),
       supabase.from("gastos_fijos") .select("*").eq("año", año).eq("mes", mes).order("concepto"),
+      Promise.all(selectorKeys.map(k => getNominaSemana(k))),
     ]);
 
-    const semanasData = semanas.map(({ ventasKey, selectorKey }) => ({
+    const semanasData = semanas.map(({ ventasKey, selectorKey }, i) => ({
       ventasKey,
       selectorKey,
-      ventasMesero: (vmRes.data  || []).filter(r => r.semana === ventasKey),
-      ventasGrupo:  (vgRes.data  || []).filter(r => r.semana === ventasKey),
-      asistencias:  (asistRes.data || []).filter(r => r.semana === selectorKey),
-      nomina:       (nomRes.data || []).filter(r => r.semana === selectorKey),
-      compras:      (cpRes.data  || []).filter(r => r.semana === selectorKey),
+      ventasMesero: (vmRes.data || []).filter(r => r.semana === ventasKey),
+      ventasGrupo:  (vgRes.data || []).filter(r => r.semana === ventasKey),
+      asistencias:  nominaPorSemana[i].asistencias,
+      nomina:       nominaPorSemana[i].rows,
+      compras:      (cpRes.data || []).filter(r => r.semana === selectorKey),
     }));
 
     res.json({ ok: true, semanas: semanasData, gastosFijos: gfRes.data || [], año, mes });

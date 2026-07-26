@@ -11,6 +11,7 @@ app.use(express.json({ limit: "15mb" }));
 app.use("/api/sync",           require("./sync"));
 app.use("/api/nomina",         require("./nomina"));
 app.use("/api/propinas",       require("./propinas"));
+app.use("/api/empleados",      require("./empleados"));
 app.use("/api/dashboard",      require("./dashboard"));
 app.use("/api/compras",        require("./compras"));
 app.use("/api/gastos",         require("./gastos"));

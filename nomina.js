@@ -1,65 +1,116 @@
-const router   = require("express").Router();
+const router = require("express").Router();
 const { supabase } = require("./supabase");
+const { calcNomina } = require("./nominaCalc");
+const { ventasDeSelector, propinasDeVentas } = require("./semanaUtils");
 
-const PCT_MOCHE    = 0.045;
-const PCT_TERMINAL = 0.08;
+// Reúne todos los datos de una semana (selector DOM-SAB) y corre el motor de cálculo.
+// Compartido por las rutas de /api/nomina, /api/propinas y por el balance mensual
+// del dashboard — un solo lugar que sabe cómo armar una semana de nómina.
+async function getNominaSemana(semanaSelector) {
+  const semanaVentas   = ventasDeSelector(semanaSelector);
+  const semanaPropinas = propinasDeVentas(semanaVentas);
 
-// Empleados base con sueldos diarios reales (AbrilSem2(26))
-const EMPLEADOS = [
-  { nombre:"Yulisa",  puesto:"Cajero",  area:"Caja",    salDiario:1000, hrsProg:20 },
-  { nombre:"Omar",    puesto:"Barra",   area:"Barra",   salDiario:950,  hrsProg:20 },
-  { nombre:"Angel",   puesto:"Mesero",  area:"Mesero",  salDiario:560,  hrsProg:0  },
-  { nombre:"Saul",    puesto:"Mesero",  area:"Mesero",  salDiario:750,  hrsProg:0  },
-  { nombre:"Edith",   puesto:"Cocina",  area:"Cocina",  salDiario:680,  hrsProg:46 },
-  { nombre:"Jorge",   puesto:"Cocina",  area:"Cocina",  salDiario:680,  hrsProg:46 },
-  { nombre:"Erick",   puesto:"Comodín", area:"Comodín", salDiario:500,  hrsProg:0  },
-  { nombre:"Andrea",  puesto:"Admin",   area:"Admin",   salDiario:800,  hrsProg:0  },
-  { nombre:"Gerardo", puesto:"Admin",   area:"Admin",   salDiario:1200, hrsProg:0  },
-];
+  const [empRes, asistRes, ventasRes, ventasPropRes, ovRes] = await Promise.all([
+    supabase.from("empleados").select("*").eq("activo", true).order("orden"),
+    supabase.from("asistencias").select("*").eq("semana", semanaSelector),
+    supabase.from("ventas_mesero").select("*").eq("semana", semanaVentas),
+    supabase.from("ventas_mesero").select("*").eq("semana", semanaPropinas),
+    supabase.from("nomina_semanal").select("*").eq("semana", semanaSelector),
+  ]);
 
-// GET /api/nomina/:semana — calcula nómina completa para una semana
+  const overrides = {};
+  (ovRes.data || []).forEach(r => { overrides[r.nombre_key] = r; });
+
+  const empleados   = empRes.data       || [];
+  const asistencias = asistRes.data     || [];
+  const ventas      = ventasRes.data    || [];
+  const ventasProp  = ventasPropRes.data|| [];
+
+  const rows = calcNomina({ empleados, asistencias, ventas, ventasProp, overrides });
+
+  return { rows, empleados, asistencias, ventas, ventasProp, semana: semanaSelector, semanaVentas, semanaPropinas };
+}
+
+// Persiste una edición de cualquier campo para un empleado en una semana.
+// dias/horas → tabla `asistencias` (reemplaza el registro, igual que antes).
+// pagoFijo/moche/propTarjeta/propPiso/comida/nota → tabla `nomina_semanal` (overrides).
+// Un valor `null` explícito limpia ese override y vuelve al cálculo por defecto.
+async function applyEdit(semana, nombre, body) {
+  const b = body || {};
+  const nombre_key = nombre.toLowerCase().trim();
+
+  if (b.dias !== undefined || b.horas !== undefined) {
+    const { data: existing } = await supabase.from("asistencias").select("*")
+      .eq("semana", semana).eq("nombre", nombre).limit(1);
+    const prev = (existing && existing[0]) || {};
+    await supabase.from("asistencias").delete().eq("semana", semana).eq("nombre", nombre);
+    const { error } = await supabase.from("asistencias").insert({
+      semana, nombre,
+      dias_asistidos: b.dias  !== undefined ? (b.dias  || 0) : (prev.dias_asistidos || 0),
+      horas_reales:   b.horas !== undefined ? (b.horas || 0) : (prev.horas_reales   || 0),
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  }
+
+  const overrideFields = ["pagoFijo", "moche", "propTarjeta", "propPiso", "comida", "nota"];
+  if (overrideFields.some(f => b[f] !== undefined)) {
+    const { data: existingOv } = await supabase.from("nomina_semanal").select("*")
+      .eq("semana", semana).eq("nombre_key", nombre_key).limit(1);
+    const prevOv = (existingOv && existingOv[0]) || {};
+    const row = {
+      semana, nombre_key,
+      pago_override:         b.pagoFijo    !== undefined ? b.pagoFijo    : (prevOv.pago_override         ?? null),
+      moche_override:        b.moche       !== undefined ? b.moche       : (prevOv.moche_override        ?? null),
+      prop_tarjeta_override: b.propTarjeta !== undefined ? b.propTarjeta : (prevOv.prop_tarjeta_override ?? null),
+      prop_piso_override:    b.propPiso    !== undefined ? b.propPiso    : (prevOv.prop_piso_override    ?? null),
+      comida:                b.comida      !== undefined ? (b.comida || 0) : (prevOv.comida ?? 0),
+      nota:                  b.nota        !== undefined ? b.nota        : (prevOv.nota ?? null),
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("nomina_semanal").upsert(row, { onConflict: "semana,nombre_key" });
+    if (error) throw error;
+  }
+}
+
+function totalizar(rows) {
+  return rows.reduce((acc, r) => ({
+    sueldo:      acc.sueldo      + (r.sueldo      || 0),
+    moche:       acc.moche       + (r.moche       || 0),
+    propTarjeta: acc.propTarjeta + (r.propTarjeta || 0),
+    propPiso:    acc.propPiso    + (r.propPiso    || 0),
+    comida:      acc.comida      + (r.comida      || 0),
+    total:       acc.total       + (r.total       || 0),
+    totalNeto:   acc.totalNeto   + (r.totalNeto   || 0),
+  }), { sueldo:0, moche:0, propTarjeta:0, propPiso:0, comida:0, total:0, totalNeto:0 });
+}
+
+// GET /api/nomina/:semana
 router.get("/:semana", async (req, res) => {
   try {
     const { semana } = req.params;
+    const { rows, semanaVentas, semanaPropinas } = await getNominaSemana(semana);
+    res.json({ ok: true, semana, semanaVentas, semanaPropinas, rows, totales: totalizar(rows) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
-    // Datos de asistencias desde Supabase
-    const { data: asistencias } = await supabase
-      .from("asistencias")
-      .select("*")
-      .eq("semana", semana);
-
-    // Datos de ventas de meseros
-    const { data: ventas } = await supabase
-      .from("ventas_mesero")
-      .select("*")
-      .eq("semana", semana);
-
-    // Calcular nómina por empleado
-    const nomina = EMPLEADOS.map(emp => {
-      const asist  = asistencias?.find(a => a.nombre.toLowerCase() === emp.nombre.toLowerCase());
-      const venta  = ventas?.find(v => v.nombre.toLowerCase() === emp.nombre.toLowerCase());
-      const dias   = asist?.dias_asistidos || 0;
-      const sueldo = emp.salDiario * dias;
-      const moche  = venta ? venta.venta * PCT_MOCHE : 0;
-      const propTarjeta = venta ? venta.prop_tarjeta * (1 - PCT_TERMINAL) : 0;
-
-      return {
-        nombre:       emp.nombre,
-        puesto:       emp.puesto,
-        area:         emp.area,
-        salDiario:    emp.salDiario,
-        dias,
-        sueldo,
-        moche,
-        propTarjeta,
-        total:        sueldo - moche + propTarjeta,
-      };
-    });
-
-    res.json({ ok: true, semana, nomina });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+// PUT /api/nomina/:semana/:nombre
+router.put("/:semana/:nombre", async (req, res) => {
+  try {
+    const { semana, nombre } = req.params;
+    await applyEdit(semana, nombre, req.body);
+    const { rows, semanaVentas, semanaPropinas } = await getNominaSemana(semana);
+    const nombre_key = nombre.toLowerCase().trim();
+    const fila = rows.find(r => r.nombre.toLowerCase().trim() === nombre_key) || null;
+    res.json({ ok: true, semana, semanaVentas, semanaPropinas, row: fila, totales: totalizar(rows) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
 module.exports = router;
+module.exports.getNominaSemana = getNominaSemana;
+module.exports.applyEdit = applyEdit;
+module.exports.totalizar = totalizar;

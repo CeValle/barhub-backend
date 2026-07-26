@@ -1,16 +1,9 @@
 const { google }   = require("googleapis");
 const Anthropic    = require("@anthropic-ai/sdk");
 const { supabase } = require("./supabase");
+const { parsearNombre, semanaVentas, semanaAsistencias, semanaGrupo, splitSemana } = require("./semanaUtils");
 
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// ── Constantes ───────────────────────────────────────────────────────────────
-const MESES = {
-  enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
-  julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
-};
-const PAD = n => String(n).padStart(2,"0");
-const FMT = d => `${d.getFullYear()}-${PAD(d.getMonth()+1)}-${PAD(d.getDate())}`;
 
 // ── Auth Google Drive ────────────────────────────────────────────────────────
 function getDriveClient() {
@@ -20,80 +13,6 @@ function getDriveClient() {
     scopes: ["https://www.googleapis.com/auth/drive.readonly"],
   });
   return google.drive({ version:"v3", auth });
-}
-
-// ── Parser de nombres de archivo ─────────────────────────────────────────────
-function parsearNombre(nombre) {
-  let n = nombre.replace(/\.pdf$/i,"")
-    .replace(/^ventas\/mesero\s*/i,"")
-    .replace(/^asistencias\s*/i,"")
-    .replace(/^ventas?\s+por\s+grupo\s*/i,"").trim();
-
-  // "06-10 de mayo 2026" o "8-12 abril 2026"
-  let m = n.match(/^(\d{1,2})-(\d{1,2})\s+(?:de\s+)?(\w+)\s+(\d{4})/i);
-  if (m) {
-    const mes = MESES[m[3].toLowerCase()];
-    if (mes) return { d1:+m[1], m1:mes, d2:+m[2], m2:mes, año:+m[4] };
-  }
-
-  // "29 de abril - 3 de mayo 2026"
-  m = n.match(/^(\d{1,2})\s+de\s+(\w+)\s*[-–]\s*(\d{1,2})\s+de\s+(\w+)\s+(\d{4})/i);
-  if (m) {
-    const m1 = MESES[m[2].toLowerCase()], m2 = MESES[m[4].toLowerCase()];
-    if (m1 && m2) return { d1:+m[1], m1, d2:+m[3], m2, año:+m[5] };
-  }
-
-  // "26 abril-2 mayo 2026" (sin "de")
-  m = n.match(/^(\d{1,2})\s+(\w+)\s*[-–]\s*(\d{1,2})\s+(\w+)\s+(\d{4})/i);
-  if (m) {
-    const m1 = MESES[m[2].toLowerCase()], m2 = MESES[m[4].toLowerCase()];
-    if (m1 && m2) return { d1:+m[1], m1, d2:+m[3], m2, año:+m[5] };
-  }
-
-  return null;
-}
-
-// Ventas/Grupos → clave MIÉ-DOM exacta del PDF
-function semanaVentas(p) {
-  if (!p) return null;
-  return `${p.año}-${PAD(p.m1)}-${PAD(p.d1)}_a_${p.año}-${PAD(p.m2)}-${PAD(p.d2)}`;
-}
-
-// Asistencias → clave DOM-SAB
-// Ancla: el SÁBADO más cercano al último día del PDF define el fin de semana
-// Luego domingo = ese sábado - 6 días
-function semanaAsistencias(p) {
-  if (!p) return null;
-  const finPDF = new Date(p.año, p.m2-1, p.d2);
-  const diaSem = finPDF.getDay(); // 0=dom, 6=sab
-
-  // Encontrar el sábado: si ya es sábado lo usa, si es domingo suma 6, si otro suma los días que faltan al sábado
-  const diasAlSab = diaSem === 6 ? 0 : (diaSem === 0 ? 6 : 6 - diaSem);
-  const sab = new Date(finPDF); sab.setDate(finPDF.getDate() + diasAlSab);
-  const dom = new Date(sab);    dom.setDate(sab.getDate() - 6);
-  return `${FMT(dom)}_a_${FMT(sab)}`;
-}
-
-// Grupos → sem N MMMM → MIÉ-DOM
-function semanaGrupo(nombre) {
-  // Patrón 1: "sem N [de] mes [año]"  (ej. "sem 3 de mayo 2026", "sem3 mayo 2026")
-  let m = nombre.match(/sem\s*(\d+)\s+(?:de\s+)?(\w+)(?:\s+(\d{4}))?/i);
-  if (m) {
-    const numSem = +m[1], mes = MESES[m[2].toLowerCase()], año = m[3] ? +m[3] : new Date().getFullYear();
-    if (mes) {
-      const p = new Date(año, mes-1, 1);
-      const dow = p.getDay();
-      const diasAlMier = dow <= 3 ? 3 - dow : 10 - dow;
-      const primerMier = new Date(año, mes-1, 1 + diasAlMier);
-      const mier = new Date(primerMier); mier.setDate(primerMier.getDate() + (numSem-1)*7);
-      const sun  = new Date(mier); sun.setDate(mier.getDate() + 4);
-      return `${FMT(mier)}_a_${FMT(sun)}`;
-    }
-  }
-  // Patrón 2: rango de fechas igual que ventas_mesero (ej. "27-31 de mayo 2026")
-  const p2 = parsearNombre(nombre);
-  if (p2) return semanaVentas(p2);
-  return null;
 }
 
 // ── Buscar PDFs en Drive ─────────────────────────────────────────────────────
@@ -171,9 +90,10 @@ async function syncSemanal(force = false) {
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "ventas_mesero");
       if (!datos.length) continue;
+      const { inicio, fin } = splitSemana(semana);
       await supabase.from("ventas_mesero").delete().eq("semana", semana);
       const { error } = await supabase.from("ventas_mesero").insert(
-        datos.map(d => ({ semana, nombre:d.nombre, venta:+d.venta||0,
+        datos.map(d => ({ semana, semana_inicio:inicio, semana_fin:fin, nombre:d.nombre, venta:+d.venta||0,
           prop_tarjeta:+d.prop_tarjeta||0, propina:+d.propina||0, efectivo:+d.efectivo||0,
           comensales:+d.comensales||0, updated_at:new Date().toISOString() }))
       );
@@ -197,9 +117,10 @@ async function syncSemanal(force = false) {
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "ventas_grupo");
       if (!datos.length) continue;
+      const { inicio, fin } = splitSemana(semana);
       await supabase.from("ventas_grupo").delete().eq("semana", semana);
       const { error } = await supabase.from("ventas_grupo").insert(
-        datos.map(d => ({ semana, grupo:d.grupo||d.nombre||"", venta:+d.venta||0,
+        datos.map(d => ({ semana, semana_inicio:inicio, semana_fin:fin, grupo:d.grupo||d.nombre||"", venta:+d.venta||0,
           es_subgrupo:d.es_subgrupo||false,
           grupo_padre:d.grupo_padre||null, updated_at:new Date().toISOString() }))
       );
@@ -222,9 +143,10 @@ async function syncSemanal(force = false) {
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "asistencias");
       if (!datos.length) continue;
+      const { inicio, fin } = splitSemana(semana);
       await supabase.from("asistencias").delete().eq("semana", semana);
       const { error } = await supabase.from("asistencias").insert(
-        datos.map(d => ({ semana, nombre:d.nombre, horas_reales:+d.horas_reales||0,
+        datos.map(d => ({ semana, semana_inicio:inicio, semana_fin:fin, nombre:d.nombre, horas_reales:+d.horas_reales||0,
           dias_asistidos:+d.dias_asistidos||0, updated_at:new Date().toISOString() }))
       );
       if (error) throw error;
