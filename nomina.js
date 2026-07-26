@@ -90,8 +90,8 @@ function totalizar(rows) {
 router.get("/:semana", async (req, res) => {
   try {
     const { semana } = req.params;
-    const { rows, semanaVentas, semanaPropinas } = await getNominaSemana(semana);
-    res.json({ ok: true, semana, semanaVentas, semanaPropinas, rows, totales: totalizar(rows) });
+    const { rows, semanaVentas, semanaPropinas, logicaNueva } = await getNominaSemana(semana);
+    res.json({ ok: true, semana, semanaVentas, semanaPropinas, logicaNueva, rows, totales: totalizar(rows) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -102,10 +102,10 @@ router.put("/:semana/:nombre", async (req, res) => {
   try {
     const { semana, nombre } = req.params;
     await applyEdit(semana, nombre, req.body);
-    const { rows, semanaVentas, semanaPropinas } = await getNominaSemana(semana);
+    const { rows, semanaVentas, semanaPropinas, logicaNueva } = await getNominaSemana(semana);
     const nombre_key = nombre.toLowerCase().trim();
     const fila = rows.find(r => r.nombre.toLowerCase().trim() === nombre_key) || null;
-    res.json({ ok: true, semana, semanaVentas, semanaPropinas, row: fila, totales: totalizar(rows) });
+    res.json({ ok: true, semana, semanaVentas, semanaPropinas, logicaNueva, row: fila, totales: totalizar(rows) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

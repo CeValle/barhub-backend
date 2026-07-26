@@ -110,9 +110,13 @@ function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides, sem
     const dias = emp.admin_fijo ? 5 : (a?.dias_asistidos || 0);
     const completo = emp.admin_fijo || (hp > 0 && hb >= hp * 0.9);
 
+    // Un pago_override es una corrección manual del monto FINAL a pagar — se
+    // aplica directo, sin volver a prorratear por asistencia (a diferencia del
+    // pago_fijo del catálogo, que sí se prorratea si la semana no está completa).
     let sueldo = 0;
-    if (!enDoc && !emp.admin_fijo) sueldo = 0;
-    else if (pf != null) sueldo = (emp.admin_fijo || completo) ? pf : Math.round((pf / 7) * dias);
+    if (pagoOverride != null) sueldo = pagoOverride;
+    else if (!enDoc && !emp.admin_fijo) sueldo = 0;
+    else if (emp.pago_fijo != null) sueldo = (emp.admin_fijo || completo) ? emp.pago_fijo : Math.round((emp.pago_fijo / 7) * dias);
     else sueldo = (emp.sal_diario || 0) * dias;
 
     const moche = mocheMap[k] || 0;
