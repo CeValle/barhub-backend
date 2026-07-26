@@ -30,37 +30,30 @@ const {useState,useEffect,useCallback}=React;
 const API="";
 
 // ── COLORES ──────────────────────────────────────────────────────────────────
-const C={
-  bg:"#0D0F0E",surface:"#141716",s2:"#1B1E1C",s3:"#222623",s4:"#282C29",
-  border:"#2A2E2B",ink:"#E8EDE9",ink2:"#B4BDB5",ink3:"#7A8A7C",ink4:"#4A574C",
-  green:"#4ADE80",greenDim:"#166534",red:"#F87171",amber:"#FCD34D",
-  blue:"#60A5FA",teal:"#2DD4BF",purple:"#A78BFA",pink:"#F472B6",orange:"#FB923C",
+// C y AREA_COLOR se mutan in-place (Object.assign) al cambiar de tema en vez de
+// reasignarse, para que todos los componentes (que leen C.xxx en cada render)
+// vean el tema nuevo sin tener que pasar `theme` por props en toda la app.
+const THEMES={
+  dark:{
+    bg:"#0D0F0E",surface:"#141716",s2:"#1B1E1C",s3:"#222623",s4:"#282C29",
+    border:"#2A2E2B",ink:"#E8EDE9",ink2:"#B4BDB5",ink3:"#7A8A7C",ink4:"#4A574C",
+    green:"#4ADE80",greenDim:"#166534",red:"#F87171",amber:"#FCD34D",
+    blue:"#60A5FA",teal:"#2DD4BF",purple:"#A78BFA",pink:"#F472B6",orange:"#FB923C",
+  },
+  light:{
+    bg:"#F3F5F3",surface:"#FFFFFF",s2:"#F3F5F3",s3:"#E8ECE8",s4:"#DDE3DD",
+    border:"#D6DCD6",ink:"#141815",ink2:"#3A453C",ink3:"#67756A",ink4:"#94A296",
+    green:"#15803D",greenDim:"#86EFAC",red:"#DC2626",amber:"#B45309",
+    blue:"#2563EB",teal:"#0D9488",purple:"#7C3AED",pink:"#DB2777",orange:"#EA580C",
+  },
 };
-const AREA_COLOR={Caja:C.purple,Barra:C.teal,Cocina:C.amber,Mesero:C.blue,Admin:C.green,"Comodín":C.pink,"Comodin":C.pink};
-
-// ── EMPLEADOS & CONSTANTES ───────────────────────────────────────────────────
-const EMPLEADOS_BASE=[
-  {nombre:"Yulisa", area:"Caja",    dept:"bar",   salDiario:1000,hrsProg:20,pagoFijo:2000,adminFijo:false},
-  {nombre:"Omar",   area:"Barra",   dept:"bar",   salDiario:950, hrsProg:20,pagoFijo:1500,adminFijo:false},
-  {nombre:"Angel",  area:"Mesero",  dept:"bar",   salDiario:560, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Saul",   area:"Mesero",  dept:"bar",   salDiario:750, hrsProg:20,pagoFijo:1500,adminFijo:false},
-  {nombre:"Chino",  area:"Mesero",  dept:"bar",   salDiario:214, hrsProg:10,pagoFijo:1500,adminFijo:false},
-  {nombre:"Edith",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Jorge",  area:"Cocina",  dept:"cocina",salDiario:680, hrsProg:46,pagoFijo:null,adminFijo:false},
-  {nombre:"Erick",  area:"Comodín", dept:"bar",   salDiario:500, hrsProg:20,pagoFijo:null,adminFijo:false},
-  {nombre:"Andrea", area:"Admin",   dept:"admin", salDiario:800, hrsProg:46,pagoFijo:4000,adminFijo:true},
-  {nombre:"Gerardo",area:"Admin",   dept:"admin", salDiario:1200,hrsProg:46,pagoFijo:6000,adminFijo:true},
-];
-const PISO=[
-  {nombre:"Yulisa",area:"Caja",  hrsProg:20},
-  {nombre:"Omar",  area:"Barra",   hrsProg:20},
-  {nombre:"Erick", area:"Comodín", hrsProg:20, flexible:true},
-  {nombre:"Edith", area:"Cocina",  hrsProg:46},
-  {nombre:"Jorge", area:"Cocina",  hrsProg:46},
-];
-const TOTAL_HRS=PISO.reduce((a,p)=>a+p.hrsProg,0);
-const PCT_MOCHE=0.045,PCT_TERM=0.08;
-const SIN_MOCHE=["mesero de prueba"];
+let C={...THEMES.dark};
+let AREA_COLOR={};
+function applyTheme(name){
+  Object.assign(C, THEMES[name==="light"?"light":"dark"]);
+  Object.assign(AREA_COLOR, {Caja:C.purple,Barra:C.teal,Cocina:C.amber,Mesero:C.blue,Admin:C.green,"Comodín":C.pink,"Comodin":C.pink});
+}
+applyTheme("dark");
 
 const MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -83,58 +76,48 @@ function getSemanaOffset(base,offset){
   const sab=new Date(dom.getFullYear(),dom.getMonth(),dom.getDate()+6,12,0,0);
   return {dom,sab,key:fmt(dom)+"_a_"+fmt(sab),label:dom.getDate()+" "+MESES[dom.getMonth()].slice(0,3)+" – "+sab.getDate()+" "+MESES[sab.getMonth()].slice(0,3)};
 }
+// Construye el objeto semana {dom,sab,key,label} a partir de cualquier domingo,
+// para poder saltar directo a una semana del selector Año/Mes/Semana (no solo
+// navegar por offset relativo a hoy).
+function semanaDeFecha(domDate){
+  const dom=new Date(domDate.getFullYear(),domDate.getMonth(),domDate.getDate(),12,0,0);
+  const sab=new Date(dom.getFullYear(),dom.getMonth(),dom.getDate()+6,12,0,0);
+  return {dom,sab,key:fmt(dom)+"_a_"+fmt(sab),label:dom.getDate()+" "+MESES[dom.getMonth()].slice(0,3)+" – "+sab.getDate()+" "+MESES[sab.getMonth()].slice(0,3)};
+}
 
-// ── CÁLCULO NÓMINA ───────────────────────────────────────────────────────────
-function calcNomina(asistencias,ventas,overrides,comidaMap,ventasProp){
-  const mocheMap={},propMap={};
-  (ventas||[]).forEach(m=>{const k=m.nombre?.toLowerCase();if(SIN_MOCHE.some(n=>k===n))return;const ovM=(overrides||{})[k]?.moche;mocheMap[k]=ovM!=null?ovM:(m.venta||0)*PCT_MOCHE;});
-  const src=ventasProp&&ventasProp.length?ventasProp:ventas;
-  (src||[]).forEach(m=>{
-    const k=m.nombre?.toLowerCase();
-    const ovProp=(overrides||{})[k]?.propina;
-    const base=m.propina??m.prop_tarjeta??m.propTarjeta??0;
-    propMap[k]=(ovProp!=null?ovProp:base)*(1-PCT_TERM);
+// ── EDICIÓN PERSISTENTE DE NÓMINA/PROPINAS ───────────────────────────────────
+// Todo campo numérico de Nómina/Propinas se guarda de inmediato en el servidor
+// (PUT /api/nomina o /api/propinas — ambas rutas comparten la misma tabla de
+// overrides). Ya no existen los overrides de sesión que se perdían al refrescar.
+async function putNomina(base,semanaKey,nombre,patch){
+  const r=await fetch(API+"/api/"+base+"/"+encodeURIComponent(semanaKey)+"/"+encodeURIComponent(nombre),{
+    method:"PUT",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},
+    body:JSON.stringify(patch)
   });
-  Object.entries(overrides||{}).forEach(([k,ov])=>{if(ov.propina!=null&&propMap[k]==null)propMap[k]=ov.propina*(1-PCT_TERM);});
-  const totalMoche=Object.values(mocheMap).reduce((a,v)=>a+v,0);
-  const pisoMap={};
-  const pisoHe={};
-  PISO.forEach(p=>{
-    const k=p.nombre.toLowerCase();
-    const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===p.nombre.toLowerCase());
-    const ovHb=(overrides||{})[k]?.horasReales;
-    const hb=ovHb!=null?ovHb:(a?(a.horas_reales||0):0);
-    const he=(p.hrsProg>0&&hb>=p.hrsProg*.9)?p.hrsProg:hb;
-    pisoHe[k]=he;
-  });
-  const totalHrsEf=Object.values(pisoHe).reduce((a,v)=>a+v,0);
-  PISO.forEach(p=>{
-    const k=p.nombre.toLowerCase();
-    pisoMap[k]=totalHrsEf>0?(pisoHe[k]/totalHrsEf)*totalMoche:0;
-  });
-  return EMPLEADOS_BASE.map(emp=>{
-    const k=emp.nombre.toLowerCase();
-    const ovPf=(overrides||{})[k]?.pagoFijo;
-    const pf=ovPf??emp.pagoFijo;
-    const a=(asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
-    const ovHb=(overrides||{})[k]?.horasReales;
-    const ovDias=(overrides||{})[k]?.diasAsistidos;
-    // enDoc: override de días/horas/salario cuenta igual que aparecer en el PDF
-    const enDoc=emp.adminFijo||!!a||(ovDias!=null&&ovDias>0)||(ovHb!=null&&ovHb>0)||(ovPf!=null&&ovPf>0);
-    const hb=(enDoc&&!emp.adminFijo)?(ovHb!=null?ovHb:(a?.horas_reales||0)):0;
-    const hp=emp.hrsProg||0;
-    const dias=emp.adminFijo?5:(ovDias!=null?ovDias:(a?.dias_asistidos||0));
-    // completo: si el usuario editó días manualmente usamos dias>=5; si vino de Drive usamos horas
-    const completo=emp.adminFijo||(ovDias!=null?(dias>=5):(hp>0&&hb>=hp*.9));
-    let sueldo=0;
-    if(!enDoc&&!emp.adminFijo)sueldo=0;
-    else if(ovPf!=null)sueldo=ovPf;
-    else if(pf!=null)sueldo=(emp.adminFijo||completo)?pf:Math.round((pf/7)*dias);
-    else sueldo=emp.salDiario*dias;
-    const moche=mocheMap[k]||0,pt=propMap[k]||0,pp=pisoMap[k]||0,cm=(comidaMap||{})[k]||0;
-    const total=sueldo-moche+pt+pp;
-    return{...emp,pagoFijo:pf,dias,sueldo,moche,propTarjeta:pt,propPiso:pp,comida:cm,total,totalNeto:Math.max(0,total-cm),horasReales:completo?hp:hb,enDocumento:enDoc};
-  });
+  const d=await r.json();
+  if(!d.ok)throw new Error(d.error||"Error al guardar");
+  return d;
+}
+
+// Input numérico que guarda solo al perder foco y solo si el valor cambió.
+// value=null/undefined se muestra vacío (placeholder); enviar "" de vuelta
+// limpia el override (vuelve al cálculo por defecto del servidor).
+function EditNum({value,placeholder,color,width,onSave}){
+  const [local,setLocal]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const shown=local!==null?local:(value??"");
+  return <input type="number" value={shown} placeholder={placeholder ?? "auto"} disabled={saving}
+    onChange={e=>setLocal(e.target.value)}
+    onFocus={()=>{if(local===null)setLocal(value!=null?String(value):"");}}
+    onBlur={()=>{
+      if(local===null)return;
+      const raw=local;setLocal(null);
+      const v=raw===""?null:(parseFloat(raw)||0);
+      if(v===(value??null))return;
+      setSaving(true);
+      onSave(v).catch(e=>alert("Error al guardar: "+e.message)).finally(()=>setSaving(false));
+    }}
+    style={{width:width||70,padding:"3px 6px",background:C.s3,border:"1px solid "+C.border,borderRadius:5,color:color||C.ink,fontSize:11,fontFamily:"monospace",textAlign:"right",opacity:saving?0.55:1}}/>;
 }
 
 // ── UI COMPONENTS ─────────────────────────────────────────────────────────────
@@ -204,6 +187,7 @@ const NAV=[
   {id:"propinas", label:"Propinas",            icon:"✦",parent:"nomina_prop"},
   {id:"asistencias",label:"Asistencias",       icon:"◷"},
   {id:"ventas",   label:"Ventas",              icon:"◆"},
+  {id:"empleados",label:"Empleados",           icon:"👤"},
   {group:"FINANZAS"},
   {id:"compras",  label:"Compras",             icon:"🛒"},
   {id:"inventarios",label:"Inventarios",       icon:"📦"},
@@ -251,18 +235,76 @@ function Sidebar({tab,setTab,collapsed,setCollapsed}){
 }
 
 // ── PERIOD SELECTOR ──────────────────────────────────────────────────────────
-function PeriodSelector({semana,setSemanaOffset,semOffset,mes,anio,mobile}){
+// Panel Año/Mes/Semana: lista las semanas de un mes (desde /semanas-disponibles)
+// con indicadores de qué datos tiene cada una, para saltar directo a cualquiera.
+function SemanaPicker({semana,onJump,onClose}){
+  const [anio,setAnio]=useState(semana.dom.getFullYear());
+  const [mes,setMes]=useState(semana.dom.getMonth()+1);
+  const [semanas,setSemanas]=useState([]);
+  const [loading,setLoading]=useState(false);
+
+  useEffect(()=>{
+    let cancel=false;
+    setLoading(true);
+    fetch(API+"/api/dashboard/semanas-disponibles?anio="+anio+"&mes="+mes)
+      .then(r=>r.json()).then(d=>{if(!cancel&&d.ok)setSemanas(d.semanas||[]);})
+      .catch(()=>{if(!cancel)setSemanas([]);})
+      .finally(()=>{if(!cancel)setLoading(false);});
+    return()=>{cancel=true;};
+  },[anio,mes]);
+
+  const dot=(on,c)=>({width:6,height:6,borderRadius:"50%",background:on?c:C.ink4,flexShrink:0});
+  const navBtn={width:22,height:22,borderRadius:5,border:"1px solid "+C.border,background:C.s3,color:C.ink3,cursor:"pointer",fontSize:12};
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:60}}/>
+    <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:61,background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:12,width:270,boxShadow:"0 10px 28px rgba(0,0,0,.35)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <button onClick={()=>setAnio(a=>a-1)} style={navBtn}>‹</button>
+        <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{anio}</span>
+        <button onClick={()=>setAnio(a=>a+1)} style={navBtn}>›</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,marginBottom:10}}>
+        {MESES.map((m,i)=>(
+          <button key={i} onClick={()=>setMes(i+1)} style={{padding:"4px 0",borderRadius:5,border:"1px solid "+(mes===i+1?C.green:C.border),background:mes===i+1?C.green+"18":C.s3,color:mes===i+1?C.green:C.ink3,fontSize:8,fontWeight:mes===i+1?700:400,cursor:"pointer"}}>{m.slice(0,3)}</button>
+        ))}
+      </div>
+      <div style={{maxHeight:220,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+        {loading&&<div style={{fontSize:9,color:C.ink4,textAlign:"center",padding:10}}>Cargando…</div>}
+        {!loading&&semanas.length===0&&<div style={{fontSize:9,color:C.ink4,textAlign:"center",padding:10}}>Sin semanas este mes</div>}
+        {!loading&&semanas.map((s,i)=>{
+          const active=s.selectorKey===semana.key;
+          return(
+            <button key={i} onClick={()=>onJump(s.domSab.inicio)}
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 9px",borderRadius:6,border:"1px solid "+(active?C.green:C.border),background:active?C.green+"12":C.s3,color:active?C.green:C.ink2,fontSize:9,fontWeight:active?700:400,cursor:"pointer",textAlign:"left"}}>
+              <span>{s.domSab.inicio.slice(5)} – {s.domSab.fin.slice(5)}</span>
+              <span style={{display:"flex",gap:3}}>
+                <span title="Asistencias" style={dot(s.tieneAsistencias,C.amber)}/>
+                <span title="Ventas" style={dot(s.tieneVentas,C.blue)}/>
+                <span title="Grupos" style={dot(s.tieneGrupos,C.teal)}/>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  </>);
+}
+
+function PeriodSelector({semana,onPrev,onNext,onToday,onJump,isToday,mobile}){
   const btnSz=mobile?28:22;
+  const [open,setOpen]=useState(false);
   return(
-    <div style={{display:"flex",alignItems:"center",gap:mobile?4:6}}>
-      <button onClick={()=>setSemanaOffset(o=>o-1)} style={{width:btnSz,height:btnSz,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:6,padding:mobile?"4px 10px":"3px 10px",fontSize:mobile?10:9,color:C.ink,fontFamily:"monospace",minWidth:mobile?120:140,textAlign:"center"}}>
-        {!mobile&&<span style={{color:C.ink4}}>{MESES[mes]} {anio} · </span>}
+    <div style={{position:"relative",display:"flex",alignItems:"center",gap:mobile?4:6}}>
+      <button onClick={onPrev} style={{width:btnSz,height:btnSz,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+      <button onClick={()=>setOpen(o=>!o)} style={{background:C.s2,border:"1px solid "+(open?C.green:C.border),borderRadius:6,padding:mobile?"4px 10px":"3px 10px",fontSize:mobile?10:9,color:C.ink,fontFamily:"monospace",minWidth:mobile?120:140,textAlign:"center",cursor:"pointer"}}>
+        {!mobile&&<span style={{color:C.ink4}}>{MESES[semana.dom.getMonth()]} {semana.dom.getFullYear()} · </span>}
         {mobile&&<span style={{color:C.ink4,fontSize:8}}>{semana.key.slice(5,10)} </span>}
         {semana.label}
-      </div>
-      <button onClick={()=>setSemanaOffset(o=>o+1)} style={{width:btnSz,height:btnSz,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
-      {semOffset!==0&&<button onClick={()=>setSemanaOffset(0)} style={{padding:"2px 8px",borderRadius:4,border:"1px solid "+C.greenDim,background:"none",color:C.green,cursor:"pointer",fontSize:8}}>Hoy</button>}
+      </button>
+      <button onClick={onNext} style={{width:btnSz,height:btnSz,borderRadius:4,border:"1px solid "+C.border,background:C.s2,color:C.ink3,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+      {!isToday&&<button onClick={onToday} style={{padding:"2px 8px",borderRadius:4,border:"1px solid "+C.greenDim,background:"none",color:C.green,cursor:"pointer",fontSize:8}}>Hoy</button>}
+      {open&&<SemanaPicker semana={semana} onJump={d=>{onJump(d);setOpen(false);}} onClose={()=>setOpen(false)}/>}
     </div>
   );
 }
@@ -312,7 +354,7 @@ function KpiDrillDown({kpi,rows,data,ventasProp,onClose}){
       {kpi==="propinas"&&<table style={{width:"100%",borderCollapse:"collapse"}}>
         <TH cols={["Mesero","Prop. bruta","−8% terminal","Neto"]}/>
         <tbody>
-          {src.map((m,i)=>{const pr=m.propina??m.prop_tarjeta??0;const co=pr*PCT_TERM,ne=pr-co;return(
+          {src.map((m,i)=>{const pr=m.propina??m.prop_tarjeta??0;const co=pr*0.08,ne=pr-co;return(
             <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
               <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><Av n={m.nombre} c={C.teal} size={20}/><span style={{fontSize:10,fontWeight:600}}>{m.nombre}</span></div></td>
               <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxnD(pr)}</td>
@@ -340,11 +382,11 @@ function KpiDrillDown({kpi,rows,data,ventasProp,onClose}){
 }
 
 // ── DASHBOARD EJECUTIVO ───────────────────────────────────────────────────────
-function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab,mobile}){
+function TabDashboard({data,semana,nomina,ventasProp,grupos,setTab,mobile}){
   const [activeKpi,setActiveKpi]=useState(null);
-  const rows=calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
-  const nomTotal=rows.reduce((a,r)=>a+r.totalNeto,0);
-  const nomSueldos=rows.reduce((a,r)=>a+r.sueldo,0);
+  const rows=nomina?.rows||[];
+  const nomTotal=nomina?.totales?.totalNeto||0;
+  const nomSueldos=nomina?.totales?.sueldo||0;
   const ventasTotal=(grupos||[]).filter(g=>!g.es_subgrupo).reduce((a,g)=>a+(g.venta||0),0)||(data.ventas||[]).reduce((a,m)=>a+(m.venta||0),0);
   const propTotal=ventasProp&&ventasProp.length?ventasProp.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0):0;
   const comprasTotal=(data.compras||[]).reduce((a,c)=>a+(c.monto||0),0);
@@ -437,187 +479,46 @@ function TabDashboard({data,semana,overrides,comidaMap,ventasProp,grupos,setTab,
   );
 }
 
-// ── MODAL EDITAR VALORES ─────────────────────────────────────────────────────
-function ModalEditar({overrides,setOverrides,data,ventasProp,semana,loadData,onClose}){
-  const [tabEdit,setTabEdit]=useState("salarios");
-  const [localInputs,setLocalInputs]=useState({});
-  const changeTab=t=>{setTabEdit(t);setLocalInputs({});};
-  const [guardando,setGuardando]=useState(false);
-  const [guardMsg,setGuardMsg]=useState("");
-  const guardarDias=async()=>{
-    setGuardando(true);setGuardMsg("");
-    try{
-      const semanaKey=semana?.key||data.semanaAsist;
-      const conOverride=EMPLEADOS_BASE.filter(emp=>(overrides||{})[emp.nombre.toLowerCase()]?.diasAsistidos!=null);
-      if(!conOverride.length){setGuardMsg("Sin cambios para guardar");setGuardando(false);return;}
-      await Promise.all(conOverride.map(async emp=>{
-        const k=emp.nombre.toLowerCase();
-        const dias=(overrides||{})[k].diasAsistidos;
-        const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
-        const horas=(overrides||{})[k]?.horasReales??(a?.horas_reales||0);
-        const r=await fetch(API+"/api/dashboard/asistencia",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({semana:semanaKey,nombre:emp.nombre,dias_asistidos:dias,horas_reales:horas})});
-        const d=await r.json();
-        if(!d.ok)throw new Error(d.error||"Error "+emp.nombre);
-      }));
-      setGuardMsg("✓ Guardado en base de datos");
-      if(loadData)await loadData(semana?.key);
-    }catch(e){setGuardMsg("Error: "+e.message);}
-    setGuardando(false);
-  };
-  const ventasActual=data.ventas||[];
-  const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
-  const todosMeseros=[...ventasActual];
-  src.forEach(p=>{if(!todosMeseros.some(m=>m.nombre?.toLowerCase()===p.nombre?.toLowerCase()))todosMeseros.push({...p,venta:0});});
-  const TABS_EDIT=[
-    {id:"salarios",label:"Salarios",icon:"💰"},
-    {id:"horas",   label:"Horas",   icon:"⏱"},
-    {id:"dias",    label:"Días",    icon:"📅"},
-    {id:"propinas",label:"Propinas",icon:"✦"},
-  ];
-  return(
-    <div style={{position:"fixed",inset:0,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-      <div style={{background:C.s2,border:"1px solid "+C.border,borderRadius:12,padding:24,minWidth:400,maxHeight:"85vh",overflowY:"auto"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700}}>Editar Valores</div>
-            <div style={{fontSize:8,color:C.ink4,marginTop:2}}>Días se guardan en BD · otros aplican solo esta sesión</div>
-          </div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:C.ink4,fontSize:18,cursor:"pointer"}}>✕</button>
-        </div>
-        <div style={{display:"flex",gap:0,background:C.s3,borderRadius:7,overflow:"hidden",marginBottom:16,border:"1px solid "+C.border}}>
-          {TABS_EDIT.map(t=>(
-            <button key={t.id} onClick={()=>changeTab(t.id)} style={{flex:1,padding:"8px 2px",border:"none",borderRight:"1px solid "+C.border,background:tabEdit===t.id?C.s2:"none",color:tabEdit===t.id?C.green:C.ink4,fontSize:9,cursor:"pointer",fontWeight:tabEdit===t.id?700:400}}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-        {tabEdit==="salarios"&&EMPLEADOS_BASE.map(emp=>{
-          const k=emp.nombre.toLowerCase();
-          const val=(overrides||{})[k]?.pagoFijo??emp.pagoFijo??(emp.salDiario*5);
-          return(
-            <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
-              <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
-                <div style={{fontSize:8,color:C.ink4}}>{emp.adminFijo?"Fijo siempre":emp.pagoFijo!=null?"Fijo sem · $"+Math.round(emp.pagoFijo/7)+"/día":"Por día · $"+emp.salDiario+"/día"}</div>
-              </div>
-              <input type="number" value={localInputs["sal|"+k]!==undefined?localInputs["sal|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["sal|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseInt(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],pagoFijo:v}}));setLocalInputs(p=>{const n={...p};delete n["sal|"+k];return n;});}} style={{width:84,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.green,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
-            </div>
-          );
-        })}
-        {tabEdit==="horas"&&EMPLEADOS_BASE.filter(e=>!e.adminFijo).map(emp=>{
-          const k=emp.nombre.toLowerCase();
-          const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
-          const base=a?(a.horas_reales||0):0;
-          const val=(overrides||{})[k]?.horasReales??base;
-          return(
-            <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
-              <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
-                <div style={{fontSize:8,color:C.ink4}}>Prog: {emp.hrsProg}h · Drive: {base}h</div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <input type="number" min="0" value={localInputs["hrs|"+k]!==undefined?localInputs["hrs|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["hrs|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseInt(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],horasReales:v}}));setLocalInputs(p=>{const n={...p};delete n["hrs|"+k];return n;});}} style={{width:64,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.blue,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
-                <span style={{fontSize:9,color:C.ink4}}>h</span>
-              </div>
-            </div>
-          );
-        })}
-        {tabEdit==="dias"&&EMPLEADOS_BASE.filter(e=>!e.adminFijo).map(emp=>{
-          const k=emp.nombre.toLowerCase();
-          const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
-          const base=a?(a.dias_asistidos||0):0;
-          const val=(overrides||{})[k]?.diasAsistidos??base;
-          return(
-            <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
-              <Av n={emp.nombre} c={AREA_COLOR[emp.area]||C.ink4} size={28}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,fontWeight:600}}>{emp.nombre}</div>
-                <div style={{fontSize:8,color:C.ink4}}>Drive: {base} días · ${emp.salDiario}/día</div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <input type="number" min="0" max="7" value={localInputs["dia|"+k]!==undefined?localInputs["dia|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["dia|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseInt(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],diasAsistidos:v}}));setLocalInputs(p=>{const n={...p};delete n["dia|"+k];return n;});}} style={{width:52,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.amber,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
-                <span style={{fontSize:9,color:C.ink4}}>días</span>
-              </div>
-            </div>
-          );
-        })}
-        {tabEdit==="dias"&&<div style={{marginTop:12,display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
-          <button onClick={guardarDias} disabled={guardando} style={{padding:"7px 16px",background:C.amber+"22",border:"1px solid "+C.amber,borderRadius:6,color:C.amber,fontSize:11,fontWeight:700,cursor:"pointer"}}>{guardando?"Guardando...":"💾 Guardar días en BD"}</button>
-          {guardMsg&&<div style={{fontSize:9,color:guardMsg.startsWith("Error")?C.red:C.green}}>{guardMsg}</div>}
-        </div>}
-        {tabEdit==="propinas"&&todosMeseros.map((m,i)=>{
-          const k=m.nombre?.toLowerCase();
-          const sp=src.find(p=>p.nombre?.toLowerCase()===k);
-          const base=sp?.propina??sp?.prop_tarjeta??0;
-          const val=(overrides||{})[k]?.propina??base;
-          return(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,paddingBottom:10,borderBottom:"1px solid "+C.border}}>
-              <Av n={m.nombre} c={C.blue} size={28}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,fontWeight:600}}>{m.nombre}</div>
-                <div style={{fontSize:8,color:C.ink4}}>Drive: {mxnD(base)} · bruto (sin −8%)</div>
-              </div>
-              <input type="number" value={localInputs["pro|"+k]!==undefined?localInputs["pro|"+k]:(val??"")} onChange={e=>setLocalInputs(p=>({...p,["pro|"+k]:e.target.value}))} onBlur={e=>{const raw=e.target.value;const v=raw===""?null:(parseFloat(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],propina:v}}));setLocalInputs(p=>{const n={...p};delete n["pro|"+k];return n;});}} style={{width:96,padding:"5px 8px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.teal,fontSize:13,fontFamily:"monospace",textAlign:"right"}}/>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── TAB NÓMINA ────────────────────────────────────────────────────────────────
-function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,loadData}){
-  const [localMoche,setLocalMoche]=useState({});
-  const rows=calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
-  const ts=rows.reduce((a,r)=>a+r.sueldo,0);
-  const tm=rows.reduce((a,r)=>a+r.moche,0);
-  const tt=rows.reduce((a,r)=>a+r.propTarjeta,0);
-  const tp=rows.reduce((a,r)=>a+r.propPiso,0);
-  const tcm=rows.reduce((a,r)=>a+r.comida,0);
-  const tNet=rows.reduce((a,r)=>a+r.totalNeto,0);
-  const save=(n,m)=>fetch(API+"/api/dashboard/comida",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({semana:semana.key,nombre:n,monto:m})});
+// Todas las columnas son editables y se guardan de inmediato en el servidor
+// (ver EditNum/putNomina) — sin overrides de sesión, sin modal aparte.
+function TabNomina({semana,nomina,reloadNomina}){
+  const rows=nomina?.rows||[];
+  const t=nomina?.totales||{};
+  const edit=(nombre,patch)=>putNomina("nomina",semana.key,nombre,patch).then(reloadNomina);
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      {showSal&&<ModalEditar overrides={overrides} setOverrides={setOverrides} data={data} ventasProp={ventasProp} semana={semana} loadData={loadData} onClose={()=>setShowSal(false)}/>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        <KPI label="Sueldos brutos" value={mxn(ts)} color={C.purple}/>
-        <KPI label="Comida deducida" value={tcm>0?"("+mxn(tcm)+")":"$0"} color={C.red}/>
-        <KPI label="Total neto a pagar" value={mxnD(tNet)} color={C.green}/>
+        <KPI label="Sueldos brutos" value={mxn(t.sueldo||0)} color={C.purple}/>
+        <KPI label="Comida deducida" value={t.comida>0?"("+mxn(t.comida)+")":"$0"} color={C.red}/>
+        <KPI label="Total neto a pagar" value={mxnD(t.totalNeto||0)} color={C.green}/>
       </div>
-      <Card title={"Nómina · "+semana.label} action={<button onClick={()=>setShowSal(true)} style={{padding:"3px 10px",borderRadius:5,border:"1px solid "+C.border,background:C.s3,color:C.ink3,fontSize:8,cursor:"pointer"}}>✎ Editar</button>}>
+      <Card title={"Nómina · "+semana.label}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <TH cols={["Empleado","Área","Días","Sueldo","Moche","Prop.T","Prop.P","Comida 🍽","TOTAL"]}/>
+          <TH cols={["Empleado","Área","Días","Horas","Sueldo","Moche","Prop.T bruto","Prop.P","Comida 🍽","TOTAL"]}/>
           <tbody>
-            {rows.map((r,i)=>{const col=AREA_COLOR[r.area]||C.ink4;const isAdmin=r.adminFijo;return(
-              <tr key={i} style={{borderBottom:"1px solid "+C.border,background:isAdmin?C.green+"08":i%2===0?"transparent":C.s3+"60"}}>
+            {rows.map((r,i)=>{const col=AREA_COLOR[r.area]||C.ink4;return(
+              <tr key={i} style={{borderBottom:"1px solid "+C.border,background:r.adminFijo?C.green+"08":i%2===0?"transparent":C.s3+"60"}}>
                 <td style={{padding:"9px 10px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Av n={r.nombre} c={col}/><span style={{fontSize:11,fontWeight:600}}>{r.nombre}</span></div></td>
                 <td style={{padding:"9px 10px"}}><Badge label={r.area} color={col} bg={col+"15"}/></td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink3}}>{r.dias||"—"}</td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink2}}>{r.sueldo>0?mxn(r.sueldo):"—"}</td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace"}}>
-                  {(r.moche>0||(overrides||{})[r.nombre.toLowerCase()]?.moche!=null)
-                    ?<input type="number" value={localMoche[r.nombre.toLowerCase()]!==undefined?localMoche[r.nombre.toLowerCase()]:r.moche} onChange={e=>{const k=r.nombre.toLowerCase();const raw=e.target.value;setLocalMoche(p=>({...p,[k]:raw}));const v=raw===""?null:(parseFloat(raw)||0);setOverrides(p=>({...p,[k]:{...p[k],moche:v}}));}} onBlur={e=>{const k=r.nombre.toLowerCase();setLocalMoche(p=>{const n={...p};delete n[k];return n;});}} style={{width:76,padding:"3px 6px",background:C.s3,border:"1px solid "+C.border,borderRadius:5,color:C.red,fontSize:11,fontFamily:"monospace",textAlign:"right"}}/>
-                    :<span style={{color:C.ink4}}>-</span>}
-                </td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:r.propTarjeta>0?C.teal:C.ink4}}>{r.propTarjeta>0?mxnD(r.propTarjeta):"-"}</td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:r.propPiso>0?C.blue:C.ink4}}>{r.propPiso>0?mxnD(r.propPiso):"-"}</td>
-                <td style={{padding:"9px 10px",textAlign:"right"}}>
-                  {r.enDocumento&&<input type="number" min="0" value={comidaMap[r.nombre.toLowerCase()]||""} onChange={e=>{const v=parseFloat(e.target.value)||0;setComidaMap(p=>({...p,[r.nombre.toLowerCase()]:v}));}} onBlur={e=>{save(r.nombre,parseFloat(e.target.value)||0);}} placeholder="$0" style={{width:68,padding:"3px 6px",background:C.s3,border:"1px solid "+C.border,borderRadius:5,color:C.red,fontSize:11,fontFamily:"monospace",textAlign:"right"}}/>}
-                </td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.dias} width={44} color={C.ink2} onSave={v=>edit(r.nombre,{dias:v??0})}/></td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.horasReales} width={50} color={C.ink2} onSave={v=>edit(r.nombre,{horas:v??0})}/></td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.overrides.pagoFijo??(r.sueldo||null)} width={72} color={C.ink} onSave={v=>edit(r.nombre,{pagoFijo:v})}/></td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.overrides.moche??(r.moche||null)} width={72} color={C.red} onSave={v=>edit(r.nombre,{moche:v})}/></td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.overrides.propTarjeta??(r.propTarjetaBruto||null)} width={72} color={C.teal} onSave={v=>edit(r.nombre,{propTarjeta:v})}/></td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.overrides.propPiso??(r.propPiso||null)} width={72} color={C.blue} onSave={v=>edit(r.nombre,{propPiso:v})}/></td>
+                <td style={{padding:"9px 10px",textAlign:"right"}}><EditNum value={r.comida||null} width={68} color={C.red} onSave={v=>edit(r.nombre,{comida:v??0})}/></td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:13,fontFamily:"monospace",fontWeight:800,color:r.totalNeto>0?C.green:C.ink4}}>{r.totalNeto>0?mxnD(r.totalNeto):"—"}</td>
               </tr>
             );})}
             <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
-              <td colSpan={3} style={{padding:"9px 10px",fontSize:9,fontWeight:700,color:C.ink4}}>TOTAL A PAGAR</td>
-              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace"}}>{mxn(ts)}</td>
-              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>({mxn(tm)})</td>
-              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxn(tt)}</td>
-              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.blue}}>{mxn(tp)}</td>
-              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>{tcm>0?"("+mxn(tcm)+")":"-"}</td>
-              <td style={{padding:"9px 10px",textAlign:"right",fontSize:14,fontFamily:"monospace",fontWeight:800,color:C.green}}>{mxnD(tNet)}</td>
+              <td colSpan={4} style={{padding:"9px 10px",fontSize:9,fontWeight:700,color:C.ink4}}>TOTAL A PAGAR</td>
+              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace"}}>{mxn(t.sueldo||0)}</td>
+              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>({mxn(t.moche||0)})</td>
+              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxn(t.propTarjeta||0)}</td>
+              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.blue}}>{mxn(t.propPiso||0)}</td>
+              <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>{t.comida>0?"("+mxn(t.comida)+")":"-"}</td>
+              <td style={{padding:"9px 10px",textAlign:"right",fontSize:14,fontFamily:"monospace",fontWeight:800,color:C.green}}>{mxnD(t.totalNeto||0)}</td>
             </tr>
           </tbody>
         </table>
@@ -627,52 +528,41 @@ function TabNomina({data,semana,overrides,setOverrides,showSal,setShowSal,comida
 }
 
 // ── TAB PROPINAS ──────────────────────────────────────────────────────────────
-function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
+// Consume /api/propinas/:semana (mismo motor y tablas que Nómina) — editable y
+// persistente, sin overrides de sesión.
+function TabPropinas({data,semana,propinas,reloadNomina}){
   const ventasActual=data.ventas||[];
-  const tm=ventasActual.reduce((a,m)=>{const k=m.nombre?.toLowerCase();if(SIN_MOCHE.some(n=>k===n))return a;const ovM=(overrides||{})[k]?.moche;return a+(ovM!=null?ovM:(m.venta||0)*PCT_MOCHE);},0);
-  const src=ventasProp&&ventasProp.length?ventasProp:ventasActual;
-  const srcEff=src.map(m=>{const k=m.nombre?.toLowerCase();const ov=(overrides||{})[k]?.propina;return ov!=null?{...m,propina:ov,prop_tarjeta:ov}:m;});
-  const tt=srcEff.reduce((a,m)=>a+(m.propina??m.prop_tarjeta??0),0);
-  const nt=tt*(1-PCT_TERM);
+  const propTarjeta=propinas?.propTarjeta||[];
+  const reparto=propinas?.reparto||{totalMoche:0,totalRepartido:0,sobrante:0,empleados:[]};
+  const tm=reparto.totalMoche;
+  const tBruto=propTarjeta.reduce((a,r)=>a+(r.propTarjetaBruto||0),0);
+  const tNeto=propTarjeta.reduce((a,r)=>a+(r.propTarjeta||0),0);
+  const edit=(nombre,patch)=>putNomina("propinas",semana.key,nombre,patch).then(reloadNomina);
+  // Todos los meseros que aparecieron en ventas actuales o en el reparto de propinas
   const todos=[...ventasActual];
-  srcEff.forEach(p=>{if(!todos.some(m=>m.nombre?.toLowerCase()===p.nombre?.toLowerCase()))todos.push({...p,venta:0});});
-  // Misma lógica que calcNomina: overrides tienen prioridad, luego asistencia Drive
-  const repBase=PISO.map(p=>{
-    const k=p.nombre.toLowerCase();
-    const a=(data.asistencias||[]).find(x=>x.nombre?.toLowerCase()===k);
-    const ovHb=(overrides||{})[k]?.horasReales;
-    const hb=ovHb!=null?ovHb:(p.flexible?(a?.horas_reales||0):(a?(a.horas_reales||0):0));
-    const he=(p.hrsProg>0&&hb>=p.hrsProg*.9)?p.hrsProg:hb;
-    return{...p,he,enDocumento:!!(a||ovHb!=null)};
-  });
-  const totalHrsEf=repBase.reduce((a,p)=>a+p.he,0);
-  const rep=repBase.map(p=>({...p,ajuste:totalHrsEf>0?(p.he/totalHrsEf)*tm:0}));
+  propTarjeta.forEach(p=>{if(!todos.some(m=>m.nombre?.toLowerCase()===p.nombre?.toLowerCase()))todos.push({nombre:p.nombre,venta:0});});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         <KPI label="Moche 4.5%" value={mxn(tm)} color={C.red}/>
-        <KPI label="Propinas tarjeta (bruto)" value={mxnD(tt)} sub={semPropKey||"sem anterior"} color={C.teal}/>
-        <KPI label="Neto (−8% terminal)" value={mxnD(nt)} color={C.green}/>
+        <KPI label="Propinas tarjeta (bruto)" value={mxnD(tBruto)} sub={propinas?.semanaPropinas||"sem anterior"} color={C.teal}/>
+        <KPI label="Neto (−8% terminal)" value={mxnD(tNeto)} color={C.green}/>
       </div>
-      <Card title={"Propinas tarjeta · col. PROPINA · "+(semPropKey||"sem anterior")}>
+      <Card title={"Propinas tarjeta · "+(propinas?.semanaPropinas||"sem anterior")}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <TH cols={["Mesero","Venta actual","Moche","PROPINA sem ant","−8%","Neto"]}/>
+          <TH cols={["Mesero","Venta actual","Moche","Prop. bruto","−8%","Neto"]}/>
           <tbody>
             {todos.map((m,i)=>{
-              const _sinMoche=SIN_MOCHE.some(n=>m.nombre?.toLowerCase()===n);
-              const _ovMc=_sinMoche?null:(overrides||{})[m.nombre?.toLowerCase()]?.moche;
-              const mc=_sinMoche?0:(_ovMc!=null?_ovMc:(m.venta||0)*PCT_MOCHE);
-              const mp=srcEff.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
-              const pr=mp?.propina??mp?.prop_tarjeta??0;
-              const co=pr*PCT_TERM,ne=pr-co;
+              const r=propTarjeta.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
+              const moche=r?.moche||0, neto=r?.propTarjeta||0, bruto=r?.propTarjetaBruto||0, co=bruto-neto;
               return(
                 <tr key={i} style={{borderBottom:"1px solid "+C.border,background:i%2===0?"transparent":C.s3+"60"}}>
                   <td style={{padding:"10px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Av n={m.nombre} c={C.blue}/><span style={{fontSize:11,fontWeight:600}}>{m.nombre}</span></div></td>
                   <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.ink2}}>{mxnD(m.venta||0)}</td>
-                  <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.red}}>({mxnD(mc)})</td>
-                  <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.teal}}>{pr>0?mxnD(pr):"—"}</td>
+                  <td style={{padding:"10px",textAlign:"right"}}><EditNum value={r?.overrides?.moche??(moche||null)} width={72} color={C.red} onSave={v=>edit(m.nombre,{moche:v})}/></td>
+                  <td style={{padding:"10px",textAlign:"right"}}><EditNum value={r?.overrides?.propTarjeta??(bruto||null)} width={72} color={C.teal} onSave={v=>edit(m.nombre,{propTarjeta:v})}/></td>
                   <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.red}}>{co>0?"("+mxnD(co)+")":"-"}</td>
-                  <td style={{padding:"10px",textAlign:"right",fontSize:13,fontFamily:"monospace",fontWeight:800,color:ne>0?C.green:C.ink4}}>{ne>0?mxnD(ne):"—"}</td>
+                  <td style={{padding:"10px",textAlign:"right",fontSize:13,fontFamily:"monospace",fontWeight:800,color:neto>0?C.green:C.ink4}}>{neto>0?mxnD(neto):"—"}</td>
                 </tr>
               );
             })}
@@ -683,13 +573,13 @@ function TabPropinas({data,semana,ventasProp,semPropKey,overrides}){
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <TH cols={["Empleado","Área","Hrs Prog","Hrs Real","A Cobrar"]}/>
           <tbody>
-            {rep.map((p,i)=>{const col=AREA_COLOR[p.area]||C.ink4;return(
+            {reparto.empleados.map((p,i)=>{const col=AREA_COLOR[p.area]||C.ink4;return(
               <tr key={i} style={{borderBottom:"1px solid "+C.border,background:i%2===0?"transparent":C.s3+"60"}}>
                 <td style={{padding:"10px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Av n={p.nombre} c={col}/><span style={{fontSize:11,fontWeight:600}}>{p.nombre}</span></div></td>
                 <td style={{padding:"10px"}}><Badge label={p.area} color={col} bg={col+"15"}/></td>
                 <td style={{padding:"10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink3}}>{p.hrsProg}h</td>
-                <td style={{padding:"10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:!p.enDocumento?C.ink4:p.he<p.hrsProg?C.amber:C.green}}>{p.enDocumento?p.he+"h":<span style={{fontSize:9,color:C.ink4}}>No asistió</span>}</td>
-                <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:800,color:p.ajuste>0?C.blue:C.ink4}}>{p.ajuste>0?mxnD(p.ajuste):"$0"}</td>
+                <td style={{padding:"10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:p.hrsReal<p.hrsProg?C.amber:C.green}}>{p.hrsReal}h</td>
+                <td style={{padding:"10px",textAlign:"right"}}><EditNum value={p.overrides?.propPiso??(p.ajuste||null)} width={80} color={C.blue} onSave={v=>edit(p.nombre,{propPiso:v})}/></td>
               </tr>
             );})}
           </tbody>
@@ -728,7 +618,7 @@ function EstBadge({hb,hp,adminFijo}){
   return <Badge label="Parcial" color={C.amber} bg={C.amber+"15"}/>;
 }
 
-function TabAsistencias({data,semana,porSemanaHistorial,loadingHistorial,anioHistorial}){
+function TabAsistencias({data,semana,porSemanaHistorial,loadingHistorial,anioHistorial,empleados}){
   const [vista,setVista]=useState("semana");
   const [empSel,setEmpSel]=useState("Angel");
   const [mesSel,setMesSel]=useState(new Date().getMonth());
@@ -754,18 +644,18 @@ function TabAsistencias({data,semana,porSemanaHistorial,loadingHistorial,anioHis
       </select>}
     </div>
 
-    {vista==="semana"&&<AsistSemana asist={asist} semana={semana}/>}
-    {vista==="mes"&&<AsistMes historial={historial} mesSel={mesSel} anio={anioHistorial} loading={loadingHistorial}/>}
-    {vista==="empleado"&&<AsistEmpleado historial={historial} empSel={empSel} setEmpSel={setEmpSel} anio={anioHistorial} loading={loadingHistorial}/>}
-    {vista==="anual"&&<AsistAnual historial={historial} anio={anioHistorial} loading={loadingHistorial}/>}
+    {vista==="semana"&&<AsistSemana asist={asist} semana={semana} empleados={empleados}/>}
+    {vista==="mes"&&<AsistMes historial={historial} mesSel={mesSel} anio={anioHistorial} loading={loadingHistorial} empleados={empleados}/>}
+    {vista==="empleado"&&<AsistEmpleado historial={historial} empSel={empSel} setEmpSel={setEmpSel} anio={anioHistorial} loading={loadingHistorial} empleados={empleados}/>}
+    {vista==="anual"&&<AsistAnual historial={historial} anio={anioHistorial} loading={loadingHistorial} empleados={empleados}/>}
   </div>;
 }
 
-function AsistSemana({asist,semana}){
+function AsistSemana({asist,semana,empleados}){
   var presentes=asist.length;
   var totalHrs=asist.reduce(function(a,e){return a+(e.horas_reales||0);},0);
   var completos=asist.filter(function(e){
-    var emp=EMPLEADOS_BASE.find(function(b){return b.nombre.toLowerCase()===(e.nombre||"").toLowerCase();});
+    var emp=empleados.find(function(b){return b.nombre.toLowerCase()===(e.nombre||"").toLowerCase();});
     return emp&&(e.horas_reales||0)>=emp.hrsProg*.9;
   }).length;
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -773,13 +663,13 @@ function AsistSemana({asist,semana}){
       <KPI label="Empleados presentes" value={presentes} color={C.green}/>
       <KPI label="Completos (90%)" value={completos} color={C.blue}/>
       <KPI label="Total horas" value={totalHrs+"h"} color={C.purple}/>
-      <KPI label="Ausentes" value={(EMPLEADOS_BASE.filter(function(e){return !e.adminFijo;}).length-asist.filter(function(e){return e.nombre!=="Andrea"&&e.nombre!=="Gerardo";}).length)+" emp."} color={C.red}/>
+      <KPI label="Ausentes" value={(empleados.filter(function(e){return !e.adminFijo;}).length-asist.filter(function(e){return e.nombre!=="Andrea"&&e.nombre!=="Gerardo";}).length)+" emp."} color={C.red}/>
     </div>
     <Card title={"Detalle semana · "+semana.label}>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <TH cols={["Empleado","Área","Hrs Prog","Hrs Reales","Días","Cumplimiento","Estado"]}/>
         <tbody>
-          {EMPLEADOS_BASE.map(function(emp,i){
+          {empleados.map(function(emp,i){
             var a=asist.find(function(x){return (x.nombre||"").toLowerCase()===emp.nombre.toLowerCase();});
             var hb=a?(a.horas_reales||0):0;
             var p=emp.hrsProg>0?(hb/emp.hrsProg*100):0;
@@ -800,11 +690,11 @@ function AsistSemana({asist,semana}){
   </div>;
 }
 
-function AsistMes({historial,mesSel,anio,loading}){
+function AsistMes({historial,mesSel,anio,loading,empleados}){
   if(loading) return <div style={{padding:40,textAlign:"center",color:C.ink4}}>Cargando historial...</div>;
   var semanas=Object.keys(historial).filter(function(k){var s=parseSemana(k);return s.mes===mesSel&&s.anio===anio;}).sort();
   if(!semanas.length) return <div style={{background:C.s2,border:"1px dashed "+C.border,borderRadius:10,padding:40,textAlign:"center",color:C.ink4}}>Sin datos para {MESES[mesSel]} {anio}</div>;
-  var emps=EMPLEADOS_BASE.filter(function(e){return !e.adminFijo;});
+  var emps=empleados.filter(function(e){return !e.adminFijo;});
   return <Card title={"Asistencias · "+MESES[mesSel]+" "+anio}>
     <div style={{overflowX:"auto"}}>
       <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
@@ -840,9 +730,10 @@ function AsistMes({historial,mesSel,anio,loading}){
   </Card>;
 }
 
-function AsistEmpleado({historial,empSel,setEmpSel,anio,loading}){
+function AsistEmpleado({historial,empSel,setEmpSel,anio,loading,empleados}){
   if(loading) return <div style={{padding:40,textAlign:"center",color:C.ink4}}>Cargando...</div>;
-  var emp=EMPLEADOS_BASE.find(function(e){return e.nombre===empSel;})||EMPLEADOS_BASE[0];
+  if(!empleados||!empleados.length) return <div style={{padding:40,textAlign:"center",color:C.ink4}}>Sin empleados en el catálogo.</div>;
+  var emp=empleados.find(function(e){return e.nombre===empSel;})||empleados[0];
   var col=AREA_COLOR[emp.area]||C.ink4;
   var registros=Object.keys(historial).sort().filter(function(k){return parseSemana(k).anio===anio;}).map(function(k){
     var s=parseSemana(k);
@@ -856,7 +747,7 @@ function AsistEmpleado({historial,empSel,setEmpSel,anio,loading}){
   var promPct=semsPresente>0?registros.filter(function(r){return r.pct!=null;}).reduce(function(a,r){return a+r.pct;},0)/semsPresente:0;
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-      {EMPLEADOS_BASE.filter(function(e){return !e.adminFijo;}).map(function(e){
+      {empleados.filter(function(e){return !e.adminFijo;}).map(function(e){
         var c=AREA_COLOR[e.area]||C.ink4;
         var sel=e.nombre===empSel;
         return <button key={e.nombre} onClick={function(){setEmpSel(e.nombre);}} style={{padding:"5px 12px",borderRadius:20,border:"1px solid "+(sel?c:C.border),background:sel?c+"22":"none",color:sel?c:C.ink4,fontSize:10,cursor:"pointer",fontWeight:sel?700:400}}>{e.nombre}</button>;
@@ -888,9 +779,9 @@ function AsistEmpleado({historial,empSel,setEmpSel,anio,loading}){
   </div>;
 }
 
-function AsistAnual({historial,anio,loading}){
+function AsistAnual({historial,anio,loading,empleados}){
   if(loading) return <div style={{padding:40,textAlign:"center",color:C.ink4}}>Cargando...</div>;
-  var emps=EMPLEADOS_BASE.filter(function(e){return !e.adminFijo;});
+  var emps=empleados.filter(function(e){return !e.adminFijo;});
   var porMes={};
   Object.keys(historial).forEach(function(k){
     var s=parseSemana(k);
@@ -1133,7 +1024,7 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
             <TH cols={["Mesero","Venta","Moche","Prop.T"]}/>
             <tbody>
               {ventasM.map((m,i)=>{
-                const mc=(m.venta||0)*PCT_MOCHE;
+                const mc=(m.venta||0)*0.045;
                 const mp=(ventasProp||[]).find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
                 const pt=mp?.propina??mp?.prop_tarjeta??0;
                 return(
@@ -1148,7 +1039,7 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
               <tr style={{borderTop:"2px solid "+C.border,background:C.s3}}>
                 <td style={{padding:"9px 10px",fontSize:9,fontWeight:700,color:C.ink4}}>TOTAL</td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:800,color:C.green}}>{mxnD(totalM)}</td>
-                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>({mxnD(totalM*PCT_MOCHE)})</td>
+                <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>({mxnD(totalM*0.045)})</td>
                 <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{mxnD((ventasProp||[]).reduce((a,v)=>a+(v.propina??v.prop_tarjeta??0),0))}</td>
               </tr>
             </tbody>
@@ -1160,8 +1051,8 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
 }
 
 // ── MÓDULO DE REPORTES ──────────────────────────────────────────────────────
-function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grupos, seccion, empFiltro) {
-  var rows = calcNomina(data.asistencias, data.ventas, overrides, comidaMap, ventasProp);
+function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro) {
+  rows = rows || [];
   var ts=0,tm=0,tt=0,tp=0,tcm=0,tNet=0;
   rows.forEach(function(r){ ts+=r.sueldo; tm+=r.moche; tt+=r.propTarjeta; tp+=r.propPiso; tcm+=r.comida; tNet+=r.totalNeto; });
   var sorted = (grupos||[]).slice().sort(function(a,b){return (b.venta||0)-(a.venta||0);});
@@ -1227,7 +1118,7 @@ function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grup
     var asist = data.asistencias||[];
     body += "<h2>Asistencias</h2><table>" +
       "<tr><th>Empleado</th><th>Area</th><th class='r'>Hrs Prog</th><th class='r'>Hrs Reales</th><th class='r'>Dias</th><th class='r'>Cumplimiento</th></tr>";
-    EMPLEADOS_BASE.forEach(function(emp){
+    rows.forEach(function(emp){
       var a = asist.find(function(x){return x.nombre&&x.nombre.toLowerCase()===emp.nombre.toLowerCase();});
       var hb = a?(a.horas_reales||0):0;
       var p = emp.hrsProg>0?(hb/emp.hrsProg*100):0;
@@ -1299,7 +1190,7 @@ function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grup
       body += "<h2 style='margin-top:20px'>Desglose</h2><table>" +
         "<tr><th>Concepto</th><th class='r'>Monto</th></tr>" +
         "<tr><td>Sueldo base</td><td class='r'><b>" + mxnD(emp.sueldo) + "</b></td></tr>" +
-        (emp.moche>0?"<tr><td>(−) Moche (" + PCT_MOCHE*100 + "%)</td><td class='r neg'>(" + mxnD(emp.moche) + ")</td></tr>":"") +
+        (emp.moche>0?"<tr><td>(−) Moche (4.5%)</td><td class='r neg'>(" + mxnD(emp.moche) + ")</td></tr>":"") +
         (emp.propTarjeta>0?"<tr><td>(+) Propina tarjeta</td><td class='r pos'>" + mxnD(emp.propTarjeta) + "</td></tr>":"") +
         (emp.propPiso>0?"<tr><td>(+) Propina piso</td><td class='r pos'>" + mxnD(emp.propPiso) + "</td></tr>":"") +
         (emp.comida>0?"<tr><td>(−) Comida</td><td class='r neg'>(" + mxnD(emp.comida) + ")</td></tr>":"") +
@@ -1320,7 +1211,7 @@ function generarReporteHTML(data, semana, overrides, comidaMap, ventasProp, grup
   return "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Reporte " + semana.key + "</title><style>" + css + "</style></head><body>" + body + "</body></html>";
 }
 
-function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose,mobile}){
+function ModalReporte({data,semana,nomina,grupos,onClose,mobile}){
   const [seccion,setSeccion]=useState("todo");
   const [empFiltro,setEmpFiltro]=useState("");
   const opciones=[
@@ -1333,7 +1224,7 @@ function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose
     {id:"ventas",     label:"Solo ventas",               icon:"◆"},
   ];
   const abrir=()=>{
-    const html=generarReporteHTML(data,semana,overrides,comidaMap,ventasProp,grupos,seccion,empFiltro);
+    const html=generarReporteHTML(data,semana,nomina?.rows,grupos,seccion,empFiltro);
     const win=window.open("","_blank");
     if(win){win.document.write(html);win.document.close();setTimeout(()=>win.print(),600);}
   };
@@ -1362,7 +1253,7 @@ function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose
             <select value={empFiltro} onChange={e=>setEmpFiltro(e.target.value)}
               style={{width:"100%",padding:"9px 12px",background:C.s3,border:"1px solid "+(empFiltro?C.green:C.border),borderRadius:7,color:empFiltro?C.ink:C.ink4,fontSize:12}}>
               <option value="">— Elige un empleado —</option>
-              {EMPLEADOS_BASE.map(e=>(
+              {(nomina?.rows||[]).map(e=>(
                 <option key={e.nombre} value={e.nombre}>{e.nombre} · {e.area}</option>
               ))}
             </select>
@@ -1381,6 +1272,133 @@ function ModalReporte({data,semana,overrides,comidaMap,ventasProp,grupos,onClose
           Ctrl+P en la nueva pestaña para guardar como PDF
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── TAB EMPLEADOS (CRUD) ──────────────────────────────────────────────────────
+// Catálogo editable — reemplaza el EMPLEADOS_BASE hardcodeado. Baja lógica:
+// nunca se borra físicamente, para no perder el historial de semanas pasadas.
+function TabEmpleados({reload}){
+  const [rows,setRows]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [editing,setEditing]=useState(null); // id del empleado, o "new"
+  const [form,setForm]=useState({});
+  const [saving,setSaving]=useState(false);
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const r=await fetch(API+"/api/empleados?incluirInactivos=1");
+      const d=await r.json();
+      if(d.ok)setRows(d.empleados||[]);
+    }catch(e){console.error("empleados error",e);}
+    setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  const startNew=()=>{setForm({nombre:"",area:"",dept:"bar",salDiario:0,hrsProg:0,pagoFijo:"",adminFijo:false,enPiso:false,orden:rows.length});setEditing("new");};
+  const startEdit=(e)=>{setForm({nombre:e.nombre,area:e.area||"",dept:e.dept||"bar",salDiario:e.sal_diario||0,hrsProg:e.hrs_prog||0,pagoFijo:e.pago_fijo??"",adminFijo:!!e.admin_fijo,enPiso:!!e.en_piso,orden:e.orden||0});setEditing(e.id);};
+
+  const save=async()=>{
+    setSaving(true);
+    try{
+      const body={
+        nombre:(form.nombre||"").trim(), area:form.area, dept:form.dept,
+        salDiario:+form.salDiario||0, hrsProg:+form.hrsProg||0,
+        pagoFijo:form.pagoFijo===""?null:+form.pagoFijo,
+        adminFijo:!!form.adminFijo, enPiso:!!form.enPiso,
+        orden:+form.orden||0,
+      };
+      const url=editing==="new"?API+"/api/empleados":API+"/api/empleados/"+editing;
+      const method=editing==="new"?"POST":"PUT";
+      const r=await fetch(url,{method,headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify(body)});
+      const d=await r.json();
+      if(!d.ok)throw new Error(d.error||"Error al guardar");
+      setEditing(null);
+      await load();
+      if(reload)await reload();
+    }catch(e){alert("Error: "+e.message);}
+    setSaving(false);
+  };
+
+  const toggleActivo=async(e)=>{
+    if(e.activo){
+      if(!confirm("¿Dar de baja a "+e.nombre+"? No se borra su historial, solo deja de aparecer en semanas nuevas."))return;
+      await fetch(API+"/api/empleados/"+e.id,{method:"DELETE",headers:{"x-app-secret":"BarHub2026"}});
+    }else{
+      await fetch(API+"/api/empleados/"+e.id,{method:"PUT",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"},body:JSON.stringify({activo:true})});
+    }
+    await load();
+    if(reload)await reload();
+  };
+
+  const Field=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><span style={{fontSize:8,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</span>{children}</div>);
+  const inputStyle={padding:"7px 9px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.ink,fontSize:12,fontFamily:"monospace"};
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.ink}}>Catálogo de empleados</div>
+        <button onClick={startNew} style={{padding:"6px 14px",borderRadius:6,border:"1px solid "+C.greenDim,background:C.green+"18",color:C.green,fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Nuevo empleado</button>
+      </div>
+
+      {editing&&(
+        <Card title={editing==="new"?"Nuevo empleado":"Editar empleado"}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:12}}>
+            <Field label="Nombre"><input style={inputStyle} value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))}/></Field>
+            <Field label="Área"><input style={inputStyle} value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} placeholder="Caja, Mesero, Cocina…"/></Field>
+            <Field label="Depto">
+              <select style={inputStyle} value={form.dept} onChange={e=>setForm(f=>({...f,dept:e.target.value}))}>
+                <option value="bar">bar</option><option value="cocina">cocina</option><option value="admin">admin</option>
+              </select>
+            </Field>
+            <Field label="Salario diario"><input type="number" style={inputStyle} value={form.salDiario} onChange={e=>setForm(f=>({...f,salDiario:e.target.value}))}/></Field>
+            <Field label="Horas prog./sem"><input type="number" style={inputStyle} value={form.hrsProg} onChange={e=>setForm(f=>({...f,hrsProg:e.target.value}))}/></Field>
+            <Field label="Pago fijo sem. (vacío=por día)"><input type="number" style={inputStyle} value={form.pagoFijo} onChange={e=>setForm(f=>({...f,pagoFijo:e.target.value}))}/></Field>
+            <Field label="Orden"><input type="number" style={inputStyle} value={form.orden} onChange={e=>setForm(f=>({...f,orden:e.target.value}))}/></Field>
+          </div>
+          <div style={{display:"flex",gap:16,marginBottom:14,flexWrap:"wrap"}}>
+            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.ink3,cursor:"pointer"}}>
+              <input type="checkbox" checked={form.adminFijo} onChange={e=>setForm(f=>({...f,adminFijo:e.target.checked}))}/> Admin fijo (siempre cobra completo)
+            </label>
+            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.ink3,cursor:"pointer"}}>
+              <input type="checkbox" checked={form.enPiso} onChange={e=>setForm(f=>({...f,enPiso:e.target.checked}))}/> En piso (recibe reparto de moche)
+            </label>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={save} disabled={saving||!(form.nombre||"").trim()} style={{padding:"8px 16px",borderRadius:6,border:"1px solid "+C.greenDim,background:C.green+"18",color:C.green,fontSize:11,fontWeight:700,cursor:"pointer",opacity:saving?0.6:1}}>{saving?"Guardando...":"💾 Guardar"}</button>
+            <button onClick={()=>setEditing(null)} style={{padding:"8px 16px",borderRadius:6,border:"1px solid "+C.border,background:"none",color:C.ink3,fontSize:11,cursor:"pointer"}}>Cancelar</button>
+          </div>
+        </Card>
+      )}
+
+      <Card title={"Empleados · "+rows.filter(e=>e.activo).length+" activos"}>
+        {loading?<div style={{padding:24,textAlign:"center",color:C.ink4}}>Cargando…</div>:(
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <TH cols={["Empleado","Área","Depto","Sal. diario","Hrs prog","Pago fijo","Piso","Estado",""]}/>
+            <tbody>
+              {rows.map((e,i)=>{const col=AREA_COLOR[e.area]||C.ink4;return(
+                <tr key={e.id} style={{borderBottom:"1px solid "+C.border,background:!e.activo?C.s3+"40":i%2===0?"transparent":C.s3+"60",opacity:e.activo?1:0.55}}>
+                  <td style={{padding:"9px 10px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Av n={e.nombre} c={col}/><span style={{fontSize:11,fontWeight:600}}>{e.nombre}</span></div></td>
+                  <td style={{padding:"9px 10px"}}><Badge label={e.area||"—"} color={col} bg={col+"15"}/></td>
+                  <td style={{padding:"9px 10px",fontSize:10,color:C.ink3}}>{e.dept||"—"}</td>
+                  <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink2}}>{mxn(e.sal_diario||0)}</td>
+                  <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink3}}>{e.hrs_prog||0}h</td>
+                  <td style={{padding:"9px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.ink3}}>{e.pago_fijo!=null?mxn(e.pago_fijo):"—"}</td>
+                  <td style={{padding:"9px 10px",textAlign:"center"}}>{e.en_piso?<Badge label="Sí" color={C.blue} bg={C.blue+"15"}/>:<span style={{color:C.ink4,fontSize:10}}>—</span>}</td>
+                  <td style={{padding:"9px 10px",textAlign:"center"}}>{e.activo?<Badge label="Activo" color={C.green} bg={C.green+"15"}/>:<Badge label="Baja" color={C.red} bg={C.red+"15"}/>}</td>
+                  <td style={{padding:"9px 10px",textAlign:"right",whiteSpace:"nowrap"}}>
+                    <button onClick={()=>startEdit(e)} style={{padding:"4px 8px",borderRadius:5,border:"1px solid "+C.border,background:C.s3,color:C.ink3,fontSize:9,cursor:"pointer",marginRight:4}}>✎</button>
+                    <button onClick={()=>toggleActivo(e)} style={{padding:"4px 8px",borderRadius:5,border:"1px solid "+(e.activo?C.red:C.green),background:"none",color:e.activo?C.red:C.green,fontSize:9,cursor:"pointer"}}>{e.activo?"Baja":"Reactivar"}</button>
+                  </td>
+                </tr>
+              );})}
+              {!rows.length&&<tr><td colSpan={9} style={{padding:24,textAlign:"center",color:C.ink4,fontSize:10}}>Sin empleados.</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </Card>
     </div>
   );
 }
@@ -1620,9 +1638,11 @@ function TabCompras({data,semana,loadData}){
 }
 
 // ── BALANCE HELPERS ───────────────────────────────────────────────────────────
-// Calcula métricas de una semana sin overrides (para vista mensual)
+// Métricas de una semana para la vista mensual — usa la nómina ya calculada
+// por el servidor (s.nomina, de /api/dashboard/balance-mensual) en vez de
+// recalcularla en el cliente.
 function calcBalanceSemana(s){
-  const nom=calcNomina(s.asistencias||[],s.ventasMesero||[],{},{},[]);
+  const nom=s.nomina||[];
   const topG=(s.ventasGrupo||[]).filter(g=>!g.es_subgrupo);
   const hasG=topG.length>0;
   const vBar=hasG?topG.filter(g=>g.grupo!=="Alimentos").reduce((a,g)=>a+(g.venta||0),0):0;
@@ -1876,11 +1896,11 @@ function BalanceMensualView({mesData,mesLoading,gfEdit,setGfEdit,gfSaving,saveGF
 }
 
 // ── TAB BALANCE GENERAL ───────────────────────────────────────────────────────
-function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData,mobile}){
+function TabBalance({data,semana,grupos,nomina,loadData,mobile}){
   const compras   = data.compras    || [];
   const gfData    = data.gastosFijos|| [];
   const gastosMes = data.gastosMes  || {};
-  const nomina    = calcNomina(data.asistencias,data.ventas,overrides,comidaMap,ventasProp);
+  const nomRows   = nomina?.rows || [];
 
   // ── Vista toggles ────────────────────────────────────────────────────────
   const [vista,setVista]=useState("semanal");
@@ -1935,9 +1955,9 @@ function TabBalance({data,semana,grupos,overrides,comidaMap,ventasProp,loadData,
   // Bar: Mesero, Barra, Caja, Comodín (dept="bar")
   // Cocina: área "Cocina" (dept="cocina")
   // Admin: Andrea, Gerardo (dept="admin") → línea propia, suma a Bar en utilidad
-  const nomBar  =nomina.filter(e=>e.dept==="bar")  .reduce((a,e)=>a+e.total,0);
-  const nomCoc  =nomina.filter(e=>e.dept==="cocina").reduce((a,e)=>a+e.total,0);
-  const nomAdmin=nomina.filter(e=>e.dept==="admin") .reduce((a,e)=>a+e.total,0);
+  const nomBar  =nomRows.filter(e=>e.dept==="bar")  .reduce((a,e)=>a+e.total,0);
+  const nomCoc  =nomRows.filter(e=>e.dept==="cocina").reduce((a,e)=>a+e.total,0);
+  const nomAdmin=nomRows.filter(e=>e.dept==="admin") .reduce((a,e)=>a+e.total,0);
   const nomBarConAdmin=nomBar+nomAdmin; // para cálculo de utilidad Bar
   const nomTot  =nomBar+nomCoc+nomAdmin;
 
@@ -2248,23 +2268,37 @@ function BottomNav({tab,setTab}){
 }
 
 function App(){
+  const [tema,setTema]=useState(()=>{try{return localStorage.getItem("barhub_theme")||"dark";}catch(e){return "dark";}});
+  applyTheme(tema); // muta C/AREA_COLOR in-place antes de renderizar esta pasada
+
   const [tab,setTab]         =useState("dashboard");
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
-  const [semOffset,setSemOffset]=useState(0);
   const [mobile,setMobile]   =useState(window.innerWidth<=680);
-  const base=getSemanaActual();
-  const semana=semOffset===0?base:getSemanaOffset(base,semOffset);
+  // Semana seleccionada: se guarda el domingo real (no un offset relativo a
+  // hoy), así el selector Año/Mes/Semana puede saltar a cualquier semana y
+  // luego ‹ › siguen navegando desde ahí.
+  const [selDom,setSelDom]=useState(()=>getSemanaActual().dom);
+  const semana=semanaDeFecha(selDom);
   const mes=semana.dom.getMonth();
   const anio=semana.dom.getFullYear();
+  const isToday=fmt(selDom)===fmt(getSemanaActual().dom);
+
+  useEffect(()=>{
+    try{localStorage.setItem("barhub_theme",tema);}catch(e){}
+    document.body.style.background=C.bg;
+    document.body.style.color=C.ink;
+  },[tema]);
 
   // Data state
   const [data,setData]       =useState({ventas:[],asistencias:[]});
   const [ventasProp,setVentasProp]=useState([]);
   const [semPropKey,setSemPropKey]=useState("");
   const [grupos,setGrupos]   =useState([]);
-  const [overrides,setOverrides]=useState({});
-  const [showSal,setShowSal] =useState(false);
-  const [comidaMap,setComidaMap]=useState({});
+  // Nómina/propinas: se calculan en el servidor (nominaCalc.js) y se editan
+  // in-place vía PUT /api/nomina o /api/propinas — ya no hay overrides de
+  // sesión que se pierdan al refrescar.
+  const [nomina,setNomina]   =useState({rows:[],totales:{}});
+  const [propinas,setPropinas]=useState(null);
   const [status,setStatus]   =useState("idle");
   const [msg,setMsg]         =useState("");
   const [showReporte,setShowReporte]=useState(false);
@@ -2272,6 +2306,24 @@ function App(){
   const [porSemanaHistorial,setPorSemanaHistorial]=useState({});
   const [loadingHistorial,setLoadingHistorial]=useState(false);
   const anioHistorial=new Date().getFullYear();
+
+  // Catálogo de empleados (tabla `empleados` — reemplaza el EMPLEADOS_BASE
+  // hardcodeado). Se usa en Asistencias/Reportes; la pantalla de Empleados
+  // (CRUD) mantiene su propia copia y llama a este reload al guardar.
+  const [empleados,setEmpleados]=useState([]);
+  const loadEmpleados=useCallback(async()=>{
+    try{
+      const r=await fetch(API+"/api/empleados");
+      const d=await r.json();
+      if(d.ok)setEmpleados((d.empleados||[]).map(e=>({
+        id:e.id, nombre:e.nombre, area:e.area, dept:e.dept,
+        salDiario:e.sal_diario, hrsProg:e.hrs_prog, pagoFijo:e.pago_fijo,
+        adminFijo:e.admin_fijo, enPiso:e.en_piso, pisoFlexible:e.piso_flexible,
+        activo:e.activo, orden:e.orden,
+      })));
+    }catch(e){console.error("empleados error",e);}
+  },[]);
+  useEffect(()=>{ loadEmpleados(); },[loadEmpleados]);
 
   useEffect(()=>{
     const h=()=>setMobile(window.innerWidth<=680);
@@ -2291,14 +2343,27 @@ function App(){
         setVentasProp(n(d.ventasMeseroPropinas||[]));
         if(d.semanaVentasPropinas)setSemPropKey(d.semanaVentasPropinas);
         setGrupos(d.ventasGrupo||[]);
-        const cm={};
-        (d.comida||[]).forEach(c=>{cm[(c.nombre||"").toLowerCase()]=+(c.monto)||0;});
-        setComidaMap(cm);
         setStatus("online");
         const la=(d.semanaAsist||d.semana||"").replace(/\d{4}-/g,"").replace(/_a_/," – ");
         setMsg("✓ "+la);
       }else{setStatus("offline");setMsg("Error del servidor");}
     }catch(e){setStatus("offline");setMsg("Sin conexión: "+e.message);}
+  },[]);
+
+  const loadNomina=useCallback(async(semanaKey)=>{
+    try{
+      const r=await fetch(API+"/api/nomina/"+encodeURIComponent(semanaKey));
+      const d=await r.json();
+      if(d.ok)setNomina({rows:d.rows||[],totales:d.totales||{}});
+    }catch(e){console.error("nomina error",e);}
+  },[]);
+
+  const loadPropinas=useCallback(async(semanaKey)=>{
+    try{
+      const r=await fetch(API+"/api/propinas/"+encodeURIComponent(semanaKey));
+      const d=await r.json();
+      if(d.ok)setPropinas(d);
+    }catch(e){console.error("propinas error",e);}
   },[]);
 
   const loadHistorial=useCallback(async()=>{
@@ -2316,7 +2381,7 @@ function App(){
       setStatus("sync");setMsg("Sincronizando Drive...");
       const r=await fetch(API+"/api/sync/manual",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"}});
       const d=await r.json();
-      if(d.ok){setMsg("✓ "+(d.resultado?.procesados||0)+" archivos sincronizados");await loadData(semOffset===0?undefined:semana.key);}
+      if(d.ok){setMsg("✓ "+(d.resultado?.procesados||0)+" archivos sincronizados");await loadData(semana.key);}
     }catch(e){setMsg("Error al sincronizar");setStatus("offline");}
   };
 
@@ -2326,12 +2391,20 @@ function App(){
   // Recarga COMPLETA cada vez que cambia la semana (también en el mount inicial)
   useEffect(()=>{
     loadData(semana.key);
+    loadNomina(semana.key);
+    loadPropinas(semana.key);
   },[semana.key]);
+
+  // Tras cualquier edición (PUT) en Nómina o Propinas, ambas vistas se
+  // refrescan juntas — comparten las mismas tablas del lado del servidor.
+  const reloadNomina=useCallback(async()=>{
+    await Promise.all([loadNomina(semana.key),loadPropinas(semana.key)]);
+  },[semana.key,loadNomina,loadPropinas]);
 
   const stCol={idle:C.ink4,checking:C.amber,online:C.green,offline:C.red,sync:C.blue}[status]||C.ink4;
 
   const renderContent=()=>{
-    const props={data,semana,overrides,setOverrides,showSal,setShowSal,comidaMap,setComidaMap,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,setTab,loadData,mobile};
+    const props={data,semana,nomina,propinas,reloadNomina,ventasProp,semPropKey,grupos,porSemanaHistorial,loadingHistorial,anioHistorial,empleados,setTab,loadData,mobile};
     switch(tab){
       case "dashboard":   return <TabDashboard {...props}/>;
       case "nomina":      return <TabNomina {...props}/>;
@@ -2339,8 +2412,9 @@ function App(){
       case "asistencias": return <TabAsistencias {...props}/>;
       case "ventas":      return <TabVentas {...props}/>;
       case "compras":     return <TabCompras  data={data} semana={semana} loadData={loadData}/>;
+      case "empleados":   return <TabEmpleados empleados={empleados} reload={loadEmpleados}/>;
       case "inventarios": return <ComingSoon modulo="Inventarios" subgrupos={["Stock actual","Entradas/Salidas","Alertas","Valuación"]}/>;
-      case "balance":     return <TabBalance  data={data} semana={semana} grupos={grupos} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} loadData={loadData} mobile={mobile}/>;
+      case "balance":     return <TabBalance  data={data} semana={semana} grupos={grupos} nomina={nomina} ventasProp={ventasProp} loadData={loadData} mobile={mobile}/>;
       case "costeos":     return <ComingSoon modulo="Costeos" subgrupos={["Costos cocina","Costos bar","% Costo/Venta","Recetas"]}/>;
       case "tickets":     return <ComingSoon modulo="Tickets" subgrupos={["Subir foto ticket","Análisis Claude","Cruce con facturas","Resumen semanal"]}/>;
       case "facturas":    return <ComingSoon modulo="Facturas" subgrupos={["Gmail CFDI","Por proveedor","Pendientes de pago","CrossCheck órdenes"]}/>;
@@ -2359,11 +2433,16 @@ function App(){
         <div style={{background:C.surface,borderBottom:"1px solid "+C.border,padding:mobile?"8px 12px":"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
             {!mobile&&tab!=="dashboard"&&<button onClick={()=>setTab("dashboard")} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.greenDim,background:"none",color:C.green,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>‹</button>}
-            <PeriodSelector semana={semana} setSemanaOffset={setSemOffset} semOffset={semOffset} mes={mes} anio={anio} mobile={mobile}/>
+            <PeriodSelector semana={semana} mobile={mobile} isToday={isToday}
+              onPrev={()=>setSelDom(d=>{const n=new Date(d);n.setDate(d.getDate()-7);return n;})}
+              onNext={()=>setSelDom(d=>{const n=new Date(d);n.setDate(d.getDate()+7);return n;})}
+              onToday={()=>setSelDom(getSemanaActual().dom)}
+              onJump={iso=>setSelDom(new Date(iso+"T12:00:00"))}/>
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
             <div style={{width:6,height:6,borderRadius:"50%",background:stCol,flexShrink:0}}/>
             {!mobile&&msg&&<span style={{fontSize:9,color:C.ink4,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{msg}</span>}
+            <button onClick={()=>setTema(t=>t==="dark"?"light":"dark")} title="Cambiar tema" style={{width:26,height:26,borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.ink3,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{tema==="dark"?"☀":"☾"}</button>
             <button onClick={()=>setShowReporte(true)} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.purple,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>📄{!mobile?" Reporte":""}</button>
             <button onClick={doSync} style={{padding:"5px 10px",borderRadius:6,border:"1px solid "+C.border,background:C.s2,color:C.green,fontSize:10,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>⟳{!mobile?" Sync":""}</button>
           </div>
@@ -2378,7 +2457,7 @@ function App(){
       {/* BOTTOM NAV — solo mobile */}
       {mobile&&<BottomNav tab={tab} setTab={setTab}/>}
 
-      {showReporte&&<ModalReporte data={data} semana={semana} overrides={overrides} comidaMap={comidaMap} ventasProp={ventasProp} grupos={grupos} onClose={()=>setShowReporte(false)} mobile={mobile}/>}
+      {showReporte&&<ModalReporte data={data} semana={semana} nomina={nomina} grupos={grupos} onClose={()=>setShowReporte(false)} mobile={mobile}/>}
     </div>
   );
 }

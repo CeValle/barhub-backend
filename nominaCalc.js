@@ -33,19 +33,26 @@ function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides }) {
   // ── Propina de tarjeta (−8% comisión terminal). Prefiere la semana de propinas
   // (la semana de ventas ANTERIOR a la actual — así se reportan en los PDFs),
   // cae a la semana de ventas actual si no hay datos de la semana previa. ──
+  // propBrutoMap guarda el monto ANTES del −8% (lo que muestra/edita la UI,
+  // igual que el cliente original: el override es sobre el bruto reportado en
+  // el PDF); propMap es lo que realmente se paga (neto) y lo que se suma al total.
   const propMap = {};
+  const propBrutoMap = {};
   const src = (ventasProp && ventasProp.length) ? ventasProp : ventas;
   (src || []).forEach(m => {
     const k = m.nombre?.toLowerCase();
     if (!k) return;
     const ovProp = ov[k]?.prop_tarjeta_override;
     const base = m.propina ?? m.prop_tarjeta ?? 0;
-    propMap[k] = (ovProp != null ? ovProp : base) * (1 - PCT_TERM);
+    const bruto = ovProp != null ? ovProp : base;
+    propBrutoMap[k] = bruto;
+    propMap[k] = bruto * (1 - PCT_TERM);
   });
   // Un override de propina para alguien que no salió en ninguna fuente de ventas
   // igual se aplica (ej. corrección manual de una semana sin PDF).
   Object.entries(ov).forEach(([k, o]) => {
     if (o.prop_tarjeta_override != null && propMap[k] == null) {
+      propBrutoMap[k] = o.prop_tarjeta_override;
       propMap[k] = o.prop_tarjeta_override * (1 - PCT_TERM);
     }
   });
@@ -99,8 +106,9 @@ function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides }) {
 
     return {
       nombre: emp.nombre, area: emp.area, dept: emp.dept, enPiso: !!emp.en_piso,
+      adminFijo: !!emp.admin_fijo,
       pagoFijo: pf, dias, horasReales: completo ? hp : hb, hrsProg: hp,
-      sueldo, moche, propTarjeta: pt, propPiso: pp, comida: cm,
+      sueldo, moche, propTarjeta: pt, propTarjetaBruto: propBrutoMap[k] || 0, propPiso: pp, comida: cm,
       total, totalNeto: Math.max(0, total - cm),
       enDocumento: enDoc,
       overrides: {
