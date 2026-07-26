@@ -534,6 +534,10 @@ function TabPropinas({data,semana,propinas,reloadNomina}){
   const ventasActual=data.ventas||[];
   const propTarjeta=propinas?.propTarjeta||[];
   const reparto=propinas?.reparto||{totalMoche:0,totalRepartido:0,sobrante:0,empleados:[]};
+  // logicaNueva: desde la semana de venta del 22-26 jul 2026 la propina se paga
+  // íntegra (sin -8%) sobre la semana actual — antes de esa fecha se sigue
+  // mostrando el desglose bruto/-8%/neto tal como se calculó y pagó en su momento.
+  const logicaNueva=propinas?.logicaNueva!==false;
   const tm=reparto.totalMoche;
   const tBruto=propTarjeta.reduce((a,r)=>a+(r.propTarjetaBruto||0),0);
   const tNeto=propTarjeta.reduce((a,r)=>a+(r.propTarjeta||0),0);
@@ -545,12 +549,16 @@ function TabPropinas({data,semana,propinas,reloadNomina}){
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         <KPI label="Moche 4.5%" value={mxn(tm)} color={C.red}/>
-        <KPI label="Propinas tarjeta (bruto)" value={mxnD(tBruto)} sub={propinas?.semanaPropinas||"sem anterior"} color={C.teal}/>
-        <KPI label="Neto (−8% terminal)" value={mxnD(tNeto)} color={C.green}/>
+        {logicaNueva?(
+          <KPI label="Propinas tarjeta" value={mxnD(tNeto)} sub={semana.label} color={C.teal}/>
+        ):(<>
+          <KPI label="Propinas tarjeta (bruto)" value={mxnD(tBruto)} sub={propinas?.semanaPropinas||"sem anterior"} color={C.teal}/>
+          <KPI label="Neto (−8% terminal)" value={mxnD(tNeto)} color={C.green}/>
+        </>)}
       </div>
-      <Card title={"Propinas tarjeta · "+(propinas?.semanaPropinas||"sem anterior")}>
+      <Card title={"Propinas tarjeta · "+(logicaNueva?semana.label:(propinas?.semanaPropinas||"sem anterior"))}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <TH cols={["Mesero","Venta actual","Moche","Prop. bruto","−8%","Neto"]}/>
+          <TH cols={logicaNueva?["Mesero","Venta actual","Moche","Propina"]:["Mesero","Venta actual","Moche","Prop. bruto","−8%","Neto"]}/>
           <tbody>
             {todos.map((m,i)=>{
               const r=propTarjeta.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
@@ -561,8 +569,10 @@ function TabPropinas({data,semana,propinas,reloadNomina}){
                   <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.ink2}}>{mxnD(m.venta||0)}</td>
                   <td style={{padding:"10px",textAlign:"right"}}><EditNum value={r?.overrides?.moche??(moche||null)} width={72} color={C.red} onSave={v=>edit(m.nombre,{moche:v})}/></td>
                   <td style={{padding:"10px",textAlign:"right"}}><EditNum value={r?.overrides?.propTarjeta??(bruto||null)} width={72} color={C.teal} onSave={v=>edit(m.nombre,{propTarjeta:v})}/></td>
-                  <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.red}}>{co>0?"("+mxnD(co)+")":"-"}</td>
-                  <td style={{padding:"10px",textAlign:"right",fontSize:13,fontFamily:"monospace",fontWeight:800,color:neto>0?C.green:C.ink4}}>{neto>0?mxnD(neto):"—"}</td>
+                  {!logicaNueva&&<>
+                    <td style={{padding:"10px",textAlign:"right",fontSize:12,fontFamily:"monospace",color:C.red}}>{co>0?"("+mxnD(co)+")":"-"}</td>
+                    <td style={{padding:"10px",textAlign:"right",fontSize:13,fontFamily:"monospace",fontWeight:800,color:neto>0?C.green:C.ink4}}>{neto>0?mxnD(neto):"—"}</td>
+                  </>}
                 </tr>
               );
             })}

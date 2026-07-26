@@ -4,22 +4,37 @@
 // `nomina_semanal` en vez de arrays hardcodeados y estado de React efímero.
 
 const PCT_MOCHE = 0.045; // % de venta retenido a cada mesero ("moche")
-const PCT_TERM  = 0.08;  // % de comisión de terminal descontado de la propina de tarjeta
+const PCT_TERM  = 0.08;  // % de comisión de terminal descontado de la propina de tarjeta (solo semanas antes del corte)
 const SIN_MOCHE = ["mesero de prueba"];
+
+// Desde esta semana de venta (MIÉ-DOM, comparación lexicográfica de "YYYY-MM-DD")
+// la propina de tarjeta se paga íntegra (sin el −8% de PCT_TERM) y se calcula sobre
+// la misma semana de venta que se está viendo, no la anterior. Semanas de venta
+// anteriores a esta fecha conservan la regla vieja para no alterar cifras ya
+// calculadas/pagadas en su momento (el cálculo es en vivo, sin snapshots guardados).
+const PROPINAS_LOGICA_NUEVA_DESDE = "2026-07-22";
+
+function usaLogicaNuevaPropinas(semanaVentasKey) {
+  if (!semanaVentasKey) return true;
+  return semanaVentasKey.split("_a_")[0] >= PROPINAS_LOGICA_NUEVA_DESDE;
+}
 
 /**
  * @param {object} params
  * @param {object[]} params.empleados      - filas activas de la tabla `empleados`
  * @param {object[]} params.asistencias    - filas de `asistencias` para la semana DOM-SAB
  * @param {object[]} params.ventas         - filas de `ventas_mesero` de la semana de ventas actual (MIÉ-DOM)
- * @param {object[]} params.ventasProp     - filas de `ventas_mesero` de la semana de propinas (MIÉ-DOM anterior)
+ * @param {object[]} params.ventasProp     - filas de `ventas_mesero` de la semana anterior — solo se usan para
+ *                                           semanas de venta anteriores a PROPINAS_LOGICA_NUEVA_DESDE
  * @param {object}   params.overrides      - map nombre_key → fila de `nomina_semanal` (o {})
+ * @param {string}   params.semanaVentas   - clave MIÉ-DOM de `ventas`, determina qué regla de propina aplica
  * @returns {object[]} una fila por empleado con el cálculo final + overrides aplicados
  */
-function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides }) {
+function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides, semanaVentas }) {
   const emps = empleados || [];
   const ov   = overrides || {};
   const piso = emps.filter(e => e.en_piso);
+  const logicaNueva = usaLogicaNuevaPropinas(semanaVentas);
 
   // ── Moche por mesero (4.5% de venta, salvo overrides y "meseros de prueba") ──
   const mocheMap = {};
@@ -30,15 +45,17 @@ function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides }) {
     mocheMap[k] = ovM != null ? ovM : (m.venta || 0) * PCT_MOCHE;
   });
 
-  // ── Propina de tarjeta (−8% comisión terminal). Prefiere la semana de propinas
-  // (la semana de ventas ANTERIOR a la actual — así se reportan en los PDFs),
-  // cae a la semana de ventas actual si no hay datos de la semana previa. ──
+  // ── Propina de tarjeta ──
+  // Desde PROPINAS_LOGICA_NUEVA_DESDE: se paga íntegra (sin −8%) sobre la misma
+  // semana de venta que se está viendo. Antes de esa fecha: −8% de comisión de
+  // terminal, tomada de la semana de ventas ANTERIOR (cae a la actual si no hay
+  // datos de la previa) — así se reportaba en los PDFs bajo la regla vieja.
   // propBrutoMap guarda el monto ANTES del −8% (lo que muestra/edita la UI,
   // igual que el cliente original: el override es sobre el bruto reportado en
   // el PDF); propMap es lo que realmente se paga (neto) y lo que se suma al total.
   const propMap = {};
   const propBrutoMap = {};
-  const src = (ventasProp && ventasProp.length) ? ventasProp : ventas;
+  const src = logicaNueva ? ventas : ((ventasProp && ventasProp.length) ? ventasProp : ventas);
   (src || []).forEach(m => {
     const k = m.nombre?.toLowerCase();
     if (!k) return;
@@ -46,14 +63,14 @@ function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides }) {
     const base = m.propina ?? m.prop_tarjeta ?? 0;
     const bruto = ovProp != null ? ovProp : base;
     propBrutoMap[k] = bruto;
-    propMap[k] = bruto * (1 - PCT_TERM);
+    propMap[k] = logicaNueva ? bruto : bruto * (1 - PCT_TERM);
   });
   // Un override de propina para alguien que no salió en ninguna fuente de ventas
   // igual se aplica (ej. corrección manual de una semana sin PDF).
   Object.entries(ov).forEach(([k, o]) => {
     if (o.prop_tarjeta_override != null && propMap[k] == null) {
       propBrutoMap[k] = o.prop_tarjeta_override;
-      propMap[k] = o.prop_tarjeta_override * (1 - PCT_TERM);
+      propMap[k] = logicaNueva ? o.prop_tarjeta_override : o.prop_tarjeta_override * (1 - PCT_TERM);
     }
   });
 
@@ -123,4 +140,4 @@ function calcNomina({ empleados, asistencias, ventas, ventasProp, overrides }) {
   });
 }
 
-module.exports = { calcNomina, PCT_MOCHE, PCT_TERM, SIN_MOCHE };
+module.exports = { calcNomina, PCT_MOCHE, PCT_TERM, SIN_MOCHE, PROPINAS_LOGICA_NUEVA_DESDE, usaLogicaNuevaPropinas };

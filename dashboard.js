@@ -8,6 +8,7 @@ const {
   semanaProxima,
 } = require("./semanaUtils");
 const { getNominaSemana, applyEdit } = require("./nomina");
+const { usaLogicaNuevaPropinas } = require("./nominaCalc");
 
 // ── Caché en memoria — lista de semanas disponibles (TTL 5 min) ───────────────
 const _semsCache = { data: null, ts: 0 };
@@ -52,12 +53,15 @@ router.get("/semana-actual", async (req, res) => {
     const semanaVentasIdeal  = ventasDeSelector(semana);
     const semanaVentasActual = semsM.includes(semanaVentasIdeal) ? semanaVentasIdeal : null;
 
-    // ── Propinas: semana WED-SUN anterior a ventas actuales. SIN fallback.
-    // Si no hay ventas actuales o no hay PDF de la semana anterior → vacío.
+    // ── Propinas: desde PROPINAS_LOGICA_NUEVA_DESDE se toman de la misma semana
+    // de ventas actual (sin desfase); antes de esa fecha, de la semana WED-SUN
+    // anterior — ambas SIN fallback (vacío si no hay PDF sincronizado).
     const semanaVentasPropinas = semanaVentasActual
-      ? (semsM.includes(propinasDeVentas(semanaVentasActual))
-          ? propinasDeVentas(semanaVentasActual)
-          : null)
+      ? (usaLogicaNuevaPropinas(semanaVentasActual)
+          ? semanaVentasActual
+          : (semsM.includes(propinasDeVentas(semanaVentasActual))
+              ? propinasDeVentas(semanaVentasActual)
+              : null))
       : null;
 
     // ── Grupos: misma semana WED-SUN que ventas actuales. SIN fallback.
@@ -144,7 +148,7 @@ router.get("/semanas-disponibles", async (req, res) => {
       const sab = new Date(dom); sab.setDate(dom.getDate() + 6);
       const selectorKey  = `${FMT(dom)}_a_${FMT(sab)}`;
       const ventasKey    = ventasDeSelector(selectorKey);
-      const propinasKey  = propinasDeVentas(ventasKey);
+      const propinasKey  = usaLogicaNuevaPropinas(ventasKey) ? ventasKey : propinasDeVentas(ventasKey);
       const [vIni, vFin] = ventasKey.split("_a_");
       const [pIni, pFin] = propinasKey.split("_a_");
       semanas.push({
