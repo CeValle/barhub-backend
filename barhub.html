@@ -1061,7 +1061,7 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
 }
 
 // ── MÓDULO DE REPORTES ──────────────────────────────────────────────────────
-function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro) {
+function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logicaNueva) {
   rows = rows || [];
   var ts=0,tm=0,tt=0,tp=0,tcm=0,tNet=0;
   rows.forEach(function(r){ ts+=r.sueldo; tm+=r.moche; tt+=r.propTarjeta; tp+=r.propPiso; tcm+=r.comida; tNet+=r.totalNeto; });
@@ -1148,7 +1148,10 @@ function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro) {
       "<tr><th>Empleado</th><th>Puesto</th><th class='r'>Sueldo</th><th class='r'>Propina Tarjeta</th><th class='r'>Total a Entregar</th></tr>";
     var tSuel=0,tPropT=0,tTot=0;
     rows.forEach(function(r){
-      if(!r.enDocumento)return;
+      // Incluir si hay algo que entregar (sueldo o propina), no solo si el
+      // empleado tiene asistencia registrada esa semana — alguien puede cobrar
+      // propina de tarjeta sin aparecer en el PDF de asistencias.
+      if(!(r.sueldo>0) && !(r.propTarjeta>0))return;
       var tot=r.sueldo+(r.propTarjeta||0);
       tSuel+=r.sueldo; tPropT+=(r.propTarjeta||0); tTot+=tot;
       body+="<tr class='"+(r.adminFijo?"admin":"")+"'>"+
@@ -1162,7 +1165,9 @@ function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro) {
       "<td class='r'>"+mxnD(tSuel)+"</td>"+
       "<td class='r pos'>"+mxnD(tPropT)+"</td>"+
       "<td class='r total'>"+mxnD(tTot)+"</td></tr></table>"+
-      "<p style='font-size:9px;color:#6b7280;margin-top:4px'>* Propina tarjeta ya descontada la comisi&oacute;n del terminal (8%)</p>";
+      (logicaNueva
+        ? "<p style='font-size:9px;color:#6b7280;margin-top:4px'>* Propina tarjeta &iacute;ntegra, sin descuento</p>"
+        : "<p style='font-size:9px;color:#6b7280;margin-top:4px'>* Propina tarjeta ya descontada la comisi&oacute;n del terminal (8%)</p>");
   }
 
   if (incluyeTodo || seccion==="ventas") {
@@ -1234,7 +1239,7 @@ function ModalReporte({data,semana,nomina,grupos,onClose,mobile}){
     {id:"ventas",     label:"Solo ventas",               icon:"◆"},
   ];
   const abrir=()=>{
-    const html=generarReporteHTML(data,semana,nomina?.rows,grupos,seccion,empFiltro);
+    const html=generarReporteHTML(data,semana,nomina?.rows,grupos,seccion,empFiltro,nomina?.logicaNueva);
     const win=window.open("","_blank");
     if(win){win.document.write(html);win.document.close();setTimeout(()=>win.print(),600);}
   };
