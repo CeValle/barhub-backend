@@ -1279,6 +1279,12 @@ function ModalReporte({data,semana,nomina,grupos,onClose,mobile}){
 // ── TAB EMPLEADOS (CRUD) ──────────────────────────────────────────────────────
 // Catálogo editable — reemplaza el EMPLEADOS_BASE hardcodeado. Baja lógica:
 // nunca se borra físicamente, para no perder el historial de semanas pasadas.
+// EmpleadoField/empleadoInputStyle viven fuera de TabEmpleados a propósito:
+// si se redefinen dentro del componente, React los trata como un tipo nuevo
+// en cada render y remonta el <input> en cada tecla (pierde el foco).
+const EmpleadoField=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><span style={{fontSize:8,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</span>{children}</div>);
+const empleadoInputStyle={padding:"7px 9px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.ink,fontSize:12,fontFamily:"monospace"};
+
 function TabEmpleados({reload}){
   const [rows,setRows]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -1333,9 +1339,6 @@ function TabEmpleados({reload}){
     if(reload)await reload();
   };
 
-  const Field=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><span style={{fontSize:8,color:C.ink4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</span>{children}</div>);
-  const inputStyle={padding:"7px 9px",background:C.s3,border:"1px solid "+C.border,borderRadius:6,color:C.ink,fontSize:12,fontFamily:"monospace"};
-
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1346,17 +1349,17 @@ function TabEmpleados({reload}){
       {editing&&(
         <Card title={editing==="new"?"Nuevo empleado":"Editar empleado"}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:12}}>
-            <Field label="Nombre"><input style={inputStyle} value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))}/></Field>
-            <Field label="Área"><input style={inputStyle} value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} placeholder="Caja, Mesero, Cocina…"/></Field>
-            <Field label="Depto">
-              <select style={inputStyle} value={form.dept} onChange={e=>setForm(f=>({...f,dept:e.target.value}))}>
+            <EmpleadoField label="Nombre"><input style={empleadoInputStyle} value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))}/></EmpleadoField>
+            <EmpleadoField label="Área"><input style={empleadoInputStyle} value={form.area} onChange={e=>setForm(f=>({...f,area:e.target.value}))} placeholder="Caja, Mesero, Cocina…"/></EmpleadoField>
+            <EmpleadoField label="Depto">
+              <select style={empleadoInputStyle} value={form.dept} onChange={e=>setForm(f=>({...f,dept:e.target.value}))}>
                 <option value="bar">bar</option><option value="cocina">cocina</option><option value="admin">admin</option>
               </select>
-            </Field>
-            <Field label="Salario diario"><input type="number" style={inputStyle} value={form.salDiario} onChange={e=>setForm(f=>({...f,salDiario:e.target.value}))}/></Field>
-            <Field label="Horas prog./sem"><input type="number" style={inputStyle} value={form.hrsProg} onChange={e=>setForm(f=>({...f,hrsProg:e.target.value}))}/></Field>
-            <Field label="Pago fijo sem. (vacío=por día)"><input type="number" style={inputStyle} value={form.pagoFijo} onChange={e=>setForm(f=>({...f,pagoFijo:e.target.value}))}/></Field>
-            <Field label="Orden"><input type="number" style={inputStyle} value={form.orden} onChange={e=>setForm(f=>({...f,orden:e.target.value}))}/></Field>
+            </EmpleadoField>
+            <EmpleadoField label="Salario diario"><input type="number" style={empleadoInputStyle} value={form.salDiario} onChange={e=>setForm(f=>({...f,salDiario:e.target.value}))}/></EmpleadoField>
+            <EmpleadoField label="Horas prog./sem"><input type="number" style={empleadoInputStyle} value={form.hrsProg} onChange={e=>setForm(f=>({...f,hrsProg:e.target.value}))}/></EmpleadoField>
+            <EmpleadoField label="Pago fijo sem. (vacío=por día)"><input type="number" style={empleadoInputStyle} value={form.pagoFijo} onChange={e=>setForm(f=>({...f,pagoFijo:e.target.value}))}/></EmpleadoField>
+            <EmpleadoField label="Orden"><input type="number" style={empleadoInputStyle} value={form.orden} onChange={e=>setForm(f=>({...f,orden:e.target.value}))}/></EmpleadoField>
           </div>
           <div style={{display:"flex",gap:16,marginBottom:14,flexWrap:"wrap"}}>
             <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.ink3,cursor:"pointer"}}>
