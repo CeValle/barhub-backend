@@ -78,8 +78,10 @@ async function syncSemanal(force = false) {
   const resultado = { procesados:0, saltados:0, errores:[], semanas:[] };
 
   // 1. Ventas por mesero (MIÉ-DOM)
+  // Busca por "mesero" solo (no "Ventas/mesero") porque el nombre real del
+  // archivo varía según quien lo sube: con o sin diagonal, con guion bajo, etc.
   console.log("[SYNC] Buscando ventas/mesero...");
-  for (const pdf of await buscarPDFs(drive, "Ventas/mesero")) {
+  for (const pdf of await buscarPDFs(drive, "mesero")) {
     try {
       const semana = semanaVentas(parsearNombre(pdf.name));
       if (!semana) { console.log(`[SYNC] Sin fecha: ${pdf.name}`); continue; }
