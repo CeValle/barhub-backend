@@ -16,6 +16,7 @@ router.get("/:semana", async (req, res) => {
         nombre: r.nombre,
         moche: r.moche,
         propTarjeta: r.propTarjeta,
+        propTarjetaBruto: r.propTarjetaBruto,
         overrides: { moche: r.overrides.moche, propTarjeta: r.overrides.propTarjeta },
       }));
 
