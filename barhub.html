@@ -2385,7 +2385,12 @@ function App(){
       setStatus("sync");setMsg("Sincronizando Drive...");
       const r=await fetch(API+"/api/sync/manual",{method:"POST",headers:{"Content-Type":"application/json","x-app-secret":"BarHub2026"}});
       const d=await r.json();
-      if(d.ok){setMsg("✓ "+(d.resultado?.procesados||0)+" archivos sincronizados");await loadData(semana.key);}
+      if(d.ok){
+        setMsg("✓ "+(d.resultado?.procesados||0)+" archivos sincronizados");
+        // Nómina/Propinas/historial son fetches aparte del Dashboard — sin esto,
+        // se quedan con datos viejos hasta cambiar de semana manualmente.
+        await Promise.all([loadData(semana.key),loadNomina(semana.key),loadPropinas(semana.key),loadHistorial()]);
+      }
     }catch(e){setMsg("Error al sincronizar");setStatus("offline");}
   };
 
