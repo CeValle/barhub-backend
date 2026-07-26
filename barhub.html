@@ -2247,12 +2247,14 @@ function TabBalance({data,semana,grupos,nomina,loadData,mobile}){
 // ── APP ──────────────────────────────────────────────────────────────────────
 // ── BOTTOM NAV (mobile) ──────────────────────────────────────────────────────
 const MOBILE_TABS=[
-  {id:"dashboard",icon:"◈",label:"Inicio"},
-  {id:"nomina",   icon:"◉",label:"Nómina"},
-  {id:"ventas",   icon:"◆",label:"Ventas"},
-  {id:"empleados",icon:"👤",label:"Empleados"},
-  {id:"compras",  icon:"🛒",label:"Compras"},
-  {id:"balance",  icon:"⚖",label:"Balance"},
+  {id:"dashboard",   icon:"◈",label:"Inicio"},
+  {id:"nomina",      icon:"◉",label:"Nómina"},
+  {id:"propinas",    icon:"✦",label:"Propinas"},
+  {id:"asistencias", icon:"◷",label:"Asistencias"},
+  {id:"ventas",      icon:"◆",label:"Ventas"},
+  {id:"empleados",   icon:"👤",label:"Empleados"},
+  {id:"compras",     icon:"🛒",label:"Compras"},
+  {id:"balance",     icon:"⚖",label:"Balance"},
 ];
 function BottomNav({tab,setTab}){
   return(
