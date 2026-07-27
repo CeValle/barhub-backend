@@ -1061,7 +1061,7 @@ function TabVentas({data,grupos,semana,ventasProp,semPropKey,mobile}){
 }
 
 // ── MÓDULO DE REPORTES ──────────────────────────────────────────────────────
-function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logicaNueva) {
+function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logicaNueva, propinas) {
   rows = rows || [];
   var ts=0,tm=0,tt=0,tp=0,tcm=0,tNet=0;
   rows.forEach(function(r){ ts+=r.sueldo; tm+=r.moche; tt+=r.propTarjeta; tp+=r.propPiso; tcm+=r.comida; tNet+=r.totalNeto; });
@@ -1122,6 +1122,52 @@ function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logi
       "<td class='r'>" + mxnD(tp) + "</td>" +
       "<td class='r neg'>" + (tcm>0?"("+mxnD(tcm)+")":"-") + "</td>" +
       "<td class='r total'>" + mxnD(tNet) + "</td></tr></table>";
+  }
+
+  // Espejo de TabPropinas: misma fuente de datos (propinas.propTarjeta/reparto)
+  // y mismo layout condicional (una sola columna sin -8% desde el corte de #19).
+  if (incluyeTodo || seccion==="propinas") {
+    var ventasActualRep = data.ventas||[];
+    var propTarjetaRep  = (propinas && propinas.propTarjeta) || [];
+    var repartoRep      = (propinas && propinas.reparto) || {totalMoche:0,empleados:[]};
+    var logicaNuevaProp = propinas ? propinas.logicaNueva !== false : true;
+    var todosRep = ventasActualRep.slice();
+    propTarjetaRep.forEach(function(p){
+      if(!todosRep.some(function(m){return m.nombre && p.nombre && m.nombre.toLowerCase()===p.nombre.toLowerCase();}))
+        todosRep.push({nombre:p.nombre, venta:0});
+    });
+
+    body += "<h2>Propinas</h2><div>" +
+      "<div class='kpi'><div class='kpi-label'>Moche 4.5%</div><div class='kpi-val'>" + mxnD(repartoRep.totalMoche||0) + "</div></div></div>";
+
+    body += "<table>" + (logicaNuevaProp
+      ? "<tr><th>Mesero</th><th class='r'>Venta actual</th><th class='r'>Moche</th><th class='r'>Propina</th></tr>"
+      : "<tr><th>Mesero</th><th class='r'>Venta actual</th><th class='r'>Moche</th><th class='r'>Prop. bruto</th><th class='r'>&minus;8%</th><th class='r'>Neto</th></tr>");
+    todosRep.forEach(function(m){
+      var r = propTarjetaRep.find(function(p){return p.nombre && m.nombre && p.nombre.toLowerCase()===m.nombre.toLowerCase();});
+      var moche=(r&&r.moche)||0, neto=(r&&r.propTarjeta)||0, bruto=(r&&r.propTarjetaBruto)||0, co=bruto-neto;
+      body += "<tr><td><b>"+m.nombre+"</b></td>" +
+        "<td class='r'>"+mxnD(m.venta||0)+"</td>" +
+        "<td class='r neg'>"+(moche>0?"("+mxnD(moche)+")":"-")+"</td>";
+      if (logicaNuevaProp) {
+        body += "<td class='r pos'>"+(neto>0?mxnD(neto):"-")+"</td></tr>";
+      } else {
+        body += "<td class='r'>"+(bruto>0?mxnD(bruto):"-")+"</td>" +
+          "<td class='r neg'>"+(co>0?"("+mxnD(co)+")":"-")+"</td>" +
+          "<td class='r total pos'>"+(neto>0?mxnD(neto):"&mdash;")+"</td></tr>";
+      }
+    });
+    body += "</table>";
+
+    body += "<h2 style='margin-top:12px'>Reparto a piso</h2><table>" +
+      "<tr><th>Empleado</th><th>&Aacute;rea</th><th class='r'>Hrs Prog</th><th class='r'>Hrs Real</th><th class='r'>A Cobrar</th></tr>";
+    (repartoRep.empleados||[]).forEach(function(p){
+      body += "<tr><td><b>"+p.nombre+"</b></td><td>"+p.area+"</td>" +
+        "<td class='r'>"+(p.hrsProg||0)+"h</td>" +
+        "<td class='r'>"+(p.hrsReal||0)+"h</td>" +
+        "<td class='r total pos'>"+mxnD(p.ajuste||0)+"</td></tr>";
+    });
+    body += "</table>";
   }
 
   if (incluyeTodo || seccion==="asistencias") {
@@ -1226,20 +1272,21 @@ function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logi
   return "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Reporte " + semana.key + "</title><style>" + css + "</style></head><body>" + body + "</body></html>";
 }
 
-function ModalReporte({data,semana,nomina,grupos,onClose,mobile}){
+function ModalReporte({data,semana,nomina,propinas,grupos,onClose,mobile}){
   const [seccion,setSeccion]=useState("todo");
   const [empFiltro,setEmpFiltro]=useState("");
   const opciones=[
     {id:"todo",       label:"Reporte completo",          icon:"📄"},
     {id:"resumen",    label:"Solo resumen ejecutivo",    icon:"📊"},
     {id:"nomina",     label:"Solo nómina",               icon:"◉"},
+    {id:"propinas",   label:"Solo propinas (Moche+Tarjeta+Piso)", icon:"✦"},
     {id:"asistencias",label:"Solo asistencias",          icon:"📅"},
     {id:"sobres",     label:"Sueldo + Propina tarjeta",  icon:"💵"},
     {id:"empleado",   label:"Detalle por empleado",      icon:"👤"},
     {id:"ventas",     label:"Solo ventas",               icon:"◆"},
   ];
   const abrir=()=>{
-    const html=generarReporteHTML(data,semana,nomina?.rows,grupos,seccion,empFiltro,nomina?.logicaNueva);
+    const html=generarReporteHTML(data,semana,nomina?.rows,grupos,seccion,empFiltro,nomina?.logicaNueva,propinas);
     const win=window.open("","_blank");
     if(win){win.document.write(html);win.document.close();setTimeout(()=>win.print(),600);}
   };
@@ -2483,7 +2530,7 @@ function App(){
       {/* BOTTOM NAV — solo mobile */}
       {mobile&&<BottomNav tab={tab} setTab={setTab}/>}
 
-      {showReporte&&<ModalReporte data={data} semana={semana} nomina={nomina} grupos={grupos} onClose={()=>setShowReporte(false)} mobile={mobile}/>}
+      {showReporte&&<ModalReporte data={data} semana={semana} nomina={nomina} propinas={propinas} grupos={grupos} onClose={()=>setShowReporte(false)} mobile={mobile}/>}
     </div>
   );
 }
