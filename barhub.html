@@ -1233,9 +1233,11 @@ function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logi
       "<td class='r'>100%</td></tr></table>";
 
     body += "<h2>Ventas por Mesero</h2><table>" +
-      "<tr><th>Mesero</th><th class='r'>Venta</th><th class='r'>Propina Tarjeta</th></tr>";
+      "<tr><th>Mesero</th><th class='r'>Venta</th><th class='r'>Moche (4.5%)</th><th class='r'>Propina Tarjeta</th></tr>";
     (data.ventas||[]).forEach(function(m){
+      var mocheRep=(m.venta||0)*0.045;
       body += "<tr><td>" + m.nombre + "</td><td class='r'><b>" + mxnD(m.venta||0) + "</b></td>" +
+        "<td class='r neg'>(" + mxnD(mocheRep) + ")</td>" +
         "<td class='r'>" + mxnD(m.prop_tarjeta||0) + "</td></tr>";
     });
     body += "</table>";
