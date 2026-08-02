@@ -86,8 +86,13 @@ async function syncSemanal(force = false) {
       const semana = semanaVentas(parsearNombre(pdf.name));
       if (!semana) { console.log(`[SYNC] Sin fecha: ${pdf.name}`); continue; }
       if (!force) {
-        const { count } = await supabase.from("ventas_mesero").select("*",{count:"exact",head:true}).eq("semana",semana);
-        if (count > 0) { console.log(`[SYNC] vm:${semana} ya registrado, saltando`); resultado.saltados++; resultado.semanas.push(`vm:${semana}:skip`); continue; }
+        const { data: existentes } = await supabase.from("ventas_mesero")
+          .select("updated_at").eq("semana", semana).order("updated_at", { ascending:false }).limit(1);
+        const ultimoSync = existentes?.[0]?.updated_at;
+        if (ultimoSync && new Date(pdf.modifiedTime) <= new Date(ultimoSync)) {
+          console.log(`[SYNC] vm:${semana} sin cambios desde el último sync, saltando`);
+          resultado.saltados++; resultado.semanas.push(`vm:${semana}:skip`); continue;
+        }
       }
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "ventas_mesero");
@@ -113,8 +118,13 @@ async function syncSemanal(force = false) {
       const semana = semanaGrupo(pdf.name);
       if (!semana) { console.log(`[SYNC] Sin semana: ${pdf.name}`); continue; }
       if (!force) {
-        const { count } = await supabase.from("ventas_grupo").select("*",{count:"exact",head:true}).eq("semana",semana);
-        if (count > 0) { console.log(`[SYNC] vg:${semana} ya registrado, saltando`); resultado.saltados++; resultado.semanas.push(`vg:${semana}:skip`); continue; }
+        const { data: existentes } = await supabase.from("ventas_grupo")
+          .select("updated_at").eq("semana", semana).order("updated_at", { ascending:false }).limit(1);
+        const ultimoSync = existentes?.[0]?.updated_at;
+        if (ultimoSync && new Date(pdf.modifiedTime) <= new Date(ultimoSync)) {
+          console.log(`[SYNC] vg:${semana} sin cambios desde el último sync, saltando`);
+          resultado.saltados++; resultado.semanas.push(`vg:${semana}:skip`); continue;
+        }
       }
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "ventas_grupo");
@@ -139,8 +149,13 @@ async function syncSemanal(force = false) {
       const semana = semanaAsistencias(parsearNombre(pdf.name));
       if (!semana) { console.log(`[SYNC] Sin semana: ${pdf.name}`); continue; }
       if (!force) {
-        const { count } = await supabase.from("asistencias").select("*",{count:"exact",head:true}).eq("semana",semana);
-        if (count > 0) { console.log(`[SYNC] asist:${semana} ya registrado, saltando`); resultado.saltados++; resultado.semanas.push(`asist:${semana}:skip`); continue; }
+        const { data: existentes } = await supabase.from("asistencias")
+          .select("updated_at").eq("semana", semana).order("updated_at", { ascending:false }).limit(1);
+        const ultimoSync = existentes?.[0]?.updated_at;
+        if (ultimoSync && new Date(pdf.modifiedTime) <= new Date(ultimoSync)) {
+          console.log(`[SYNC] asist:${semana} sin cambios desde el último sync, saltando`);
+          resultado.saltados++; resultado.semanas.push(`asist:${semana}:skip`); continue;
+        }
       }
       console.log(`[SYNC] ${pdf.name} → ${semana}`);
       const datos = await extraerDatos(drive, pdf.id, "asistencias");
