@@ -63,11 +63,13 @@ const mxnD=v=>"$"+Number(v).toLocaleString("es-MX",{minimumFractionDigits:2,maxi
 const pct =v=>Number(v).toFixed(1)+"%";
 const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
+// Semana DOM-SAB más reciente ya cerrada (la que "acaba de suceder"), no la
+// que contiene hoy — el reporte de la semana en curso todavía no existe.
 function getSemanaActual(){
   const hoy=new Date();
   const noon=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate(),12,0,0);
   const dow=noon.getDay(),d=dow===0?0:dow;
-  const dom=new Date(noon.getFullYear(),noon.getMonth(),noon.getDate()-d,12,0,0);
+  const dom=new Date(noon.getFullYear(),noon.getMonth(),noon.getDate()-d-7,12,0,0);
   const sab=new Date(dom.getFullYear(),dom.getMonth(),dom.getDate()+6,12,0,0);
   return {dom,sab,key:fmt(dom)+"_a_"+fmt(sab),label:dom.getDate()+" "+MESES[dom.getMonth()].slice(0,3)+" – "+sab.getDate()+" "+MESES[sab.getMonth()].slice(0,3)};
 }

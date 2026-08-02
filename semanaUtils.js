@@ -122,10 +122,14 @@ function splitSemana(key) {
 // Único lugar donde vive este desfase — antes duplicado entre dashboard.js y
 // (potencialmente) nomina.js/propinas.js.
 
-// Semana DOM-SAB que contiene hoy.
+// Semana DOM-SAB más reciente ya cerrada (la que "acaba de suceder"), no la
+// que contiene hoy — la semana en curso nunca tiene reporte todavía (el
+// negocio lo genera y sube después de que la semana termina), así que
+// apuntar a la que contiene hoy siempre sale vacía. Se calcula la semana que
+// contiene hoy y se retrocede 7 días.
 function calcularSemanaActual() {
   const hoy = new Date(), dow = hoy.getDay(), d = dow === 0 ? 0 : dow;
-  const dom = new Date(hoy); dom.setDate(hoy.getDate() - d);
+  const dom = new Date(hoy); dom.setDate(hoy.getDate() - d - 7);
   const sab = new Date(dom); sab.setDate(dom.getDate() + 6);
   return `${FMT(dom)}_a_${FMT(sab)}`;
 }
@@ -136,7 +140,7 @@ function calcularSemanaActual() {
 // viene con ese rango, así que la clave de ventas coincide exactamente con el
 // selector, sin transformación. Antes de esta fecha, las semanas siguen
 // guardadas en Supabase con la clave vieja MIÉ-DOM y no se tocan.
-const SEMANA_NUEVO_FORMATO_DESDE = "2026-08-02";
+const SEMANA_NUEVO_FORMATO_DESDE = "2026-07-26";
 
 // Selector DOM-SAB → semana de ventas.
 // Desde SEMANA_NUEVO_FORMATO_DESDE: idéntica al selector (ya es DOM-SAB).
