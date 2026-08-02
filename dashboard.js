@@ -48,14 +48,19 @@ router.get("/semana-actual", async (req, res) => {
       ? semana
       : (semanaProxima(semana, semsA) || null);
 
-    // ── Ventas actuales: WED-SUN derivado del selector. SIN fallback.
-    // Si no hay PDF para esa semana → vacío.
+    // ── Ventas actuales: derivadas del selector, con fallback a la semana
+    // disponible más reciente (igual que asistencias) — si la semana "ideal"
+    // (la que acaba de cerrar) todavía no tiene PDF sincronizado, se muestra
+    // la última que sí lo tiene, en vez de dejar el dashboard vacío.
     const semanaVentasIdeal  = ventasDeSelector(semana);
-    const semanaVentasActual = semsM.includes(semanaVentasIdeal) ? semanaVentasIdeal : null;
+    const semanaVentasActual = semsM.includes(semanaVentasIdeal)
+      ? semanaVentasIdeal
+      : (semanaProxima(semanaVentasIdeal, semsM) || null);
 
     // ── Propinas: desde PROPINAS_LOGICA_NUEVA_DESDE se toman de la misma semana
-    // de ventas actual (sin desfase); antes de esa fecha, de la semana WED-SUN
-    // anterior — ambas SIN fallback (vacío si no hay PDF sincronizado).
+    // de ventas actual (sin desfase, ya resuelta con su propio fallback arriba);
+    // antes de esa fecha, de la semana WED-SUN anterior — sin fallback propio
+    // (vacío si no hay PDF sincronizado para esa semana previa específica).
     const semanaVentasPropinas = semanaVentasActual
       ? (usaLogicaNuevaPropinas(semanaVentasActual)
           ? semanaVentasActual
@@ -64,10 +69,12 @@ router.get("/semana-actual", async (req, res) => {
               : null))
       : null;
 
-    // ── Grupos: misma semana WED-SUN que ventas actuales. SIN fallback.
-    const semanaGrupos = semanaVentasActual && semsG.includes(semanaVentasActual)
-      ? semanaVentasActual
-      : null;
+    // ── Grupos: mismo fallback que ventas, resuelto de forma independiente
+    // sobre su propia lista de semanas disponibles (semsG puede tener huecos
+    // distintos a semsM).
+    const semanaGrupos = semsG.includes(semanaVentasIdeal)
+      ? semanaVentasIdeal
+      : (semanaProxima(semanaVentasIdeal, semsG) || null);
 
     // Extraer año/mes del selector para gastos fijos
     const [selIni] = semana.split("_a_");
