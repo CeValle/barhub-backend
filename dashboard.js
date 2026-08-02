@@ -215,22 +215,21 @@ router.get("/asistencias-anio", async (req, res) => {
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// Calcula todos los bloques MIÉ-DOM cuyo miércoles cae en el mes dado
+// Calcula todas las semanas (selector DOM-SAB) cuyo domingo cae en el mes dado,
+// con su clave de ventas correspondiente (vía ventasDeSelector — mismo mapeo
+// que usa el resto del dashboard, incluye el cutoff a DOM-SAB nuevo formato).
 // Devuelve [{ventasKey, selectorKey}]
 function semanasEnMes(año, mes) {
   const result = [];
-  const lastDay = new Date(año, mes, 0, 12, 0, 0); // último día del mes
-  // Primer miércoles del mes
   let d = new Date(año, mes - 1, 1, 12, 0, 0);
-  while (d.getDay() !== 3) d.setDate(d.getDate() + 1);
-  while (d <= lastDay) {
-    const mier = new Date(d);
-    const sun  = new Date(d); sun.setDate(d.getDate() + 4);
-    const dom  = new Date(d); dom.setDate(d.getDate() - 3);
-    const sab  = new Date(dom); sab.setDate(dom.getDate() + 6);
+  while (d.getDay() !== 0) d.setDate(d.getDate() + 1); // primer domingo del mes
+  while (d.getMonth() === mes - 1 && d.getFullYear() === año) {
+    const dom = new Date(d);
+    const sab = new Date(dom); sab.setDate(dom.getDate() + 6);
+    const selectorKey = `${FMT(dom)}_a_${FMT(sab)}`;
     result.push({
-      ventasKey:   `${FMT(mier)}_a_${FMT(sun)}`,
-      selectorKey: `${FMT(dom)}_a_${FMT(sab)}`,
+      ventasKey:   ventasDeSelector(selectorKey),
+      selectorKey,
     });
     d.setDate(d.getDate() + 7);
   }

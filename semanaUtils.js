@@ -130,9 +130,22 @@ function calcularSemanaActual() {
   return `${FMT(dom)}_a_${FMT(sab)}`;
 }
 
-// Selector DOM-SAB → semana de ventas MIÉ-DOM (dom+3 a dom+7)
+// Desde esta fecha (domingo de la semana de negocio), la semana de ventas ya
+// no es MIÉ-DOM: el negocio redefinió su semana a DOM-SAB completa (cierra
+// lunes/martes, reabre miércoles, termina sábado) — el reporte que se sube ya
+// viene con ese rango, así que la clave de ventas coincide exactamente con el
+// selector, sin transformación. Antes de esta fecha, las semanas siguen
+// guardadas en Supabase con la clave vieja MIÉ-DOM y no se tocan.
+const SEMANA_NUEVO_FORMATO_DESDE = "2026-08-02";
+
+// Selector DOM-SAB → semana de ventas.
+// Desde SEMANA_NUEVO_FORMATO_DESDE: idéntica al selector (ya es DOM-SAB).
+// Antes: MIÉ-DOM derivado del selector (dom+3 a dom+7), como se guardó siempre.
 function ventasDeSelector(selectorKey) {
-  const dom  = new Date(selectorKey.split("_a_")[0] + "T12:00:00");
+  const domStr = selectorKey.split("_a_")[0];
+  if (domStr >= SEMANA_NUEVO_FORMATO_DESDE) return selectorKey;
+
+  const dom  = new Date(domStr + "T12:00:00");
   const mier = new Date(dom); mier.setDate(dom.getDate() + 3);
   const sun  = new Date(dom); sun.setDate(dom.getDate() + 7);
   return `${FMT(mier)}_a_${FMT(sun)}`;
@@ -167,5 +180,6 @@ module.exports = {
   ventasDeSelector,
   propinasDeVentas,
   semanaProxima,
+  SEMANA_NUEVO_FORMATO_DESDE,
   toSemanaKey: semanaVentas, // alias usado antes en driveDetalle.js
 };
