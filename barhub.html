@@ -1249,16 +1249,16 @@ function generarReporteHTML(data, semana, rows, grupos, seccion, empFiltro, logi
   if (seccion==="empleado" && empFiltro) {
     var emp = rows.find(function(r){ return r.nombre.toLowerCase()===empFiltro.toLowerCase(); });
     if (emp) {
+      var ventaEmp = (data.ventas||[]).find(function(m){return m.nombre && emp.nombre && m.nombre.toLowerCase()===emp.nombre.toLowerCase();});
       body += "<h2>Detalle de Empleado — " + emp.nombre + "</h2>";
       body += "<div class='kpi'><div class='kpi-label'>Puesto</div><div class='kpi-val' style='font-size:14px'>" + emp.area + "</div></div>" +
         "<div class='kpi'><div class='kpi-label'>Sueldo neto</div><div class='kpi-val'>" + mxnD(emp.totalNeto) + "</div></div>" +
         "<div class='kpi'><div class='kpi-label'>Propina tarjeta</div><div class='kpi-val'>" + mxnD(emp.propTarjeta) + "</div></div>" +
-        "<div class='kpi'><div class='kpi-label'>Días asistidos</div><div class='kpi-val'>" + emp.dias + "</div></div>";
-      var ventaEmp = (data.ventas||[]).find(function(m){return m.nombre && emp.nombre && m.nombre.toLowerCase()===emp.nombre.toLowerCase();});
+        "<div class='kpi'><div class='kpi-label'>Días asistidos</div><div class='kpi-val'>" + emp.dias + "</div></div>" +
+        (ventaEmp&&ventaEmp.venta>0?"<div class='kpi'><div class='kpi-label'>Venta (mesero)</div><div class='kpi-val'>" + mxnD(ventaEmp.venta) + "</div></div>":"");
       body += "<h2 style='margin-top:20px'>Desglose</h2><table>" +
         "<tr><th>Concepto</th><th class='r'>Monto</th></tr>" +
         "<tr><td>Sueldo base</td><td class='r'><b>" + mxnD(emp.sueldo) + "</b></td></tr>" +
-        (ventaEmp&&ventaEmp.venta>0?"<tr><td>Venta (mesero)</td><td class='r'><b>" + mxnD(ventaEmp.venta) + "</b></td></tr>":"") +
         (emp.moche>0?"<tr><td>(−) Moche (4.5%)</td><td class='r neg'>(" + mxnD(emp.moche) + ")</td></tr>":"") +
         (emp.propTarjeta>0?"<tr><td>(+) Propina tarjeta</td><td class='r pos'>" + mxnD(emp.propTarjeta) + "</td></tr>":"") +
         (emp.propPiso>0?"<tr><td>(+) Propina piso</td><td class='r pos'>" + mxnD(emp.propPiso) + "</td></tr>":"") +
