@@ -323,14 +323,16 @@ function KpiDrillDown({kpi,rows,data,ventasProp,onClose}){
         <button onClick={onClose} style={{background:"none",border:"none",color:C.ink4,fontSize:14,cursor:"pointer",padding:"0 4px"}}>✕</button>
       </div>
       {kpi==="ventas"&&<table style={{width:"100%",borderCollapse:"collapse"}}>
-        <TH cols={["Mesero","Venta","Prop. Tarjeta"]}/>
+        <TH cols={["Mesero","Venta","Moche","Prop. Tarjeta"]}/>
         <tbody>
           {ventasActual.map((m,i)=>{
             const sp=src.find(p=>p.nombre?.toLowerCase()===m.nombre?.toLowerCase());
             const pt=sp?.propina??sp?.prop_tarjeta??0;
+            const mc=(m.venta||0)*0.045;
             return <tr key={i} style={{borderBottom:"1px solid "+C.border}}>
               <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><Av n={m.nombre} c={C.blue} size={20}/><span style={{fontSize:10,fontWeight:600}}>{m.nombre}</span></div></td>
               <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.green,fontWeight:700}}>{mxnD(m.venta||0)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.red}}>({mxnD(mc)})</td>
               <td style={{padding:"7px 10px",textAlign:"right",fontSize:11,fontFamily:"monospace",color:C.teal}}>{pt>0?mxnD(pt):"-"}</td>
             </tr>;
           })}
